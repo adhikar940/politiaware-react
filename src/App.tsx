@@ -1,8 +1,10 @@
 import { IonApp, IonRouterOutlet, IonSplitPane, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Redirect, Route } from 'react-router-dom';
-import Menu from './components/Menu';
 import Page from './pages/Page';
+import SideMenu from './components/SideMenu/SideMenu';
+import Home from './pages/Home/Home';
+import CMs from './pages/CMs/CMs';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -39,20 +41,18 @@ setupIonicReact();
 const App: React.FC = () => {
   return (
     <IonApp>
-      <IonReactRouter>
-        <IonSplitPane contentId="main">
-          <Menu />
-          <IonRouterOutlet id="main">
-            <Route path="/" exact={true}>
-              <Redirect to="/folder/Inbox" />
-            </Route>
-            <Route path="/folder/:name" exact={true}>
-              <Page />
-            </Route>
-          </IonRouterOutlet>
-        </IonSplitPane>
-      </IonReactRouter>
-    </IonApp>
+  <IonReactRouter>
+    {/* Use Menu as overlay menu (mobile style) */}
+    <SideMenu />
+    <IonRouterOutlet id="main">
+      <Route path="/" exact>
+        <Redirect to="/home" />
+      </Route>
+      <Route exact path="/home" component={Home} />
+      <Route exact path="/CMs" component={CMs} />
+    </IonRouterOutlet>
+  </IonReactRouter>
+</IonApp>
   );
 };
 

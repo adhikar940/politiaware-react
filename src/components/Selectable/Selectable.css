@@ -1,0 +1,20 @@
+.selectable-wrapper {
+    position: fixed;
+    top: 72px; /* below ion-header */
+    right: 16px;
+    z-index: 9999;
+  }
+top: calc(64px + env(safe-area-inset-top));
+
+  
+  .selector-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(97, 50, 50, 0.1);
+    padding: 8px;
+  }
+  
+  .options {
+    margin-top: 8px;
+  }
+  
