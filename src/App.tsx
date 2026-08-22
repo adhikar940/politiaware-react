@@ -1,10 +1,11 @@
 import { IonApp, IonRouterOutlet, IonSplitPane, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
-import { Redirect, Route } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 import Page from './pages/Page';
 import SideMenu from './components/SideMenu/SideMenu';
 import Home from './pages/Home/Home';
 import CMs from './pages/CMs/CMs';
+import Loksabha from './pages/Loksabha/Loksabha';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -41,18 +42,17 @@ setupIonicReact();
 const App: React.FC = () => {
   return (
     <IonApp>
-  <IonReactRouter>
-    {/* Use Menu as overlay menu (mobile style) */}
-    <SideMenu />
-    <IonRouterOutlet id="main">
-      <Route path="/" exact>
-        <Redirect to="/home" />
-      </Route>
-      <Route exact path="/home" component={Home} />
-      <Route exact path="/CMs" component={CMs} />
-    </IonRouterOutlet>
-  </IonReactRouter>
-</IonApp>
+      <IonReactRouter>
+        {/* Use Menu as overlay menu (mobile style) */}
+        <SideMenu />
+        <IonRouterOutlet id="main">
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/CMs" element={<CMs />} />
+          <Route path="/Loksabha" element={<Loksabha />} />
+        </IonRouterOutlet>
+      </IonReactRouter>
+    </IonApp>
   );
 };
 

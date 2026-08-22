@@ -39,7 +39,10 @@ const appPages = [
     url: '/CMs',
     customIcon: '/assets/images/cm.png'
   },
-  
+  {
+    title: 'Loksabha',
+    url: '/Loksabha'
+  },
 ];
 
 const SideMenu: React.FC = () => {

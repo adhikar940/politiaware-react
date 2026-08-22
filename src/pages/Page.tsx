@@ -8,7 +8,7 @@ import {
   IonButton,
   IonIcon
 } from '@ionic/react';
-import { useParams } from 'react-router';
+import { useParams } from 'react-router-dom';
 import ExploreContainer from '../components/ExploreContainer';
 import './Page.css';
 import { menuOutline } from 'ionicons/icons';
