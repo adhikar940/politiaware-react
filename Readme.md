@@ -27,7 +27,7 @@ Ensure you have the following installed on your system:
   ```bash
   npm install -g @ionic/cli
   ```
-- **Backend Service**: Ensure the Politiaware Django backend is running (default: `http://127.0.0.1:9000`).
+- **Backend Service**: Ensure the Politiaware Django backend is running (default: `http://localhost:9000`).
 - **(For Mobile Builds)**:
   - **Android**: Android Studio, JDK 17+, Android SDK
   - **iOS**: macOS with Xcode 15+ and CocoaPods
@@ -56,7 +56,7 @@ Update `public/config.json` if your backend is hosted on a different host or por
 
 ```json
 {
-  "GRAPHQL_BACKENDURL": "http://127.0.0.1:9000/graphql/"
+  "GRAPHQL_BACKENDURL": "http://localhost:9000/graphql/"
 }
 ```
 

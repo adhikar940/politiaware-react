@@ -13,7 +13,7 @@ const UnderConstruction = () => {
   );
 };
 
-const styles = {
+const styles: { [key: string]: React.CSSProperties } = {
   container: {
     textAlign: 'center',
     padding: '50px',

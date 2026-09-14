@@ -1,11 +1,12 @@
-import { IonApp, IonRouterOutlet, IonSplitPane, setupIonicReact } from '@ionic/react';
+import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Navigate, Route } from 'react-router-dom';
-import Page from './pages/Page';
 import SideMenu from './components/SideMenu/SideMenu';
 import Home from './pages/Home/Home';
 import CMs from './pages/CMs/CMs';
 import Loksabha from './pages/Loksabha/Loksabha';
+import EntityPlaceholder from './pages/EntityPlaceholder/EntityPlaceholder';
+import Governors from './pages/Governors/Governors';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -23,17 +24,6 @@ import '@ionic/react/css/text-transformation.css';
 import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 
-/**
- * Ionic Dark Mode
- * -----------------------------------------------------
- * For more info, please see:
- * https://ionicframework.com/docs/theming/dark-mode
- */
-
-/* import '@ionic/react/css/palettes/dark.always.css'; */
-/* import '@ionic/react/css/palettes/dark.class.css'; */
-import '@ionic/react/css/palettes/dark.system.css';
-
 /* Theme variables */
 import './theme/variables.css';
 
@@ -43,13 +33,26 @@ const App: React.FC = () => {
   return (
     <IonApp>
       <IonReactRouter>
-        {/* Use Menu as overlay menu (mobile style) */}
+        {/* Persistent Side Menu */}
         <SideMenu />
         <IonRouterOutlet id="main">
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<Home />} />
           <Route path="/CMs" element={<CMs />} />
           <Route path="/Loksabha" element={<Loksabha />} />
+          <Route path="/Governors" element={<Governors />} />
+          <Route
+            path="/Rajyasabha"
+            element={<EntityPlaceholder title="Rajya Sabha Members" count={244} queryName="allRajyasabhaMPs(limit: 10, offset: 0)" />}
+          />
+          <Route
+            path="/Assembly"
+            element={<EntityPlaceholder title="State Legislative Assemblies (MLAs)" count="4,108" queryName="allMLAs(limit: 10, offset: 0)" />}
+          />
+          <Route
+            path="/Council"
+            element={<EntityPlaceholder title="State Legislative Councils (MLCs)" count={408} queryName="allMLCs(limit: 10, offset: 0)" />}
+          />
         </IonRouterOutlet>
       </IonReactRouter>
     </IonApp>

@@ -1,3 +1,4 @@
+import React, { useState, useMemo } from 'react';
 import {
   IonButtons,
   IonContent,
@@ -6,132 +7,919 @@ import {
   IonTitle,
   IonToolbar,
   IonButton,
-  IonIcon,IonSpinner 
+  IonIcon,
+  IonSpinner,
 } from '@ionic/react';
-import { menuOutline } from 'ionicons/icons';
-import Tablecom from '../../components/Tablecom/Tablecom';
-import Chartcom from '../../components/Chartcom/Chartcom';
-import Mapcom from '../../components/Mapcom/Mapcom';
-import Selectable from '../../components/Selectable/Selectable';
-import React, { useState,useEffect } from 'react';
-import './CMs.css';
-import '../../global.css';
-import { useLazyTable } from '../../customhooks/useTable';
-import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
+import {
+  menuOutline,
+  searchOutline,
+  refreshOutline,
+  alertCircleOutline,
+  funnelOutline,
+  closeCircleOutline,
+  closeOutline,
+} from 'ionicons/icons';
+import { useQuery } from '@apollo/client';
+import {
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  TablePagination,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Checkbox,
+  ListItemText,
+  TableSortLabel,
+} from '@mui/material';
 
-function MyPage() {
-  return <UnderConstruction />;
+import { cmsConfig, buildGraphQLQuery, renderCell } from '../../config';
+import Selectable from '../../components/Selectable/Selectable';
+import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
+import { FilterSection } from '../../components/FilterSection/FilterSection';
+import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
+import { evaluateFilterRule } from '../../components/FilterSection/filterEvaluator';
+import { useGraphQLFilterSchema } from '../../components/FilterSection/useGraphQLFilterSchema';
+import './CMs.css';
+
+export interface CmRecord {
+  id: number | string;
+  name: string;
+  state: string;
+  status: 'State' | 'UT';
+  party: string;
+  partyName: string;
+  partyColor?: string;
+  rawParty?: any;
+  gender: string;
+  religion: string;
+  highestEducation: string;
+  university: string;
+  startDate: string;
+  ispresent: boolean;
 }
 
-import { GET_ALL_CMS_Table, GET_CMS_Count } from './CMs_graphql_queries';
+type CategoryKey = 'Party' | 'Gender' | 'Religion' | 'Education';
 
-//Table related constants
-const totalColumns_table = ['Name', 'State', 'Party', 'Gender', 'CasteCategory', 'Religion'];
-const defaultColumns = ['Name', 'State', 'Party', 'Gender'];
+const ALL_COLUMNS = cmsConfig.tableColumns.map((col) => ({
+  id: col.id,
+  label: col.label,
+}));
 
-//Chart related constants
-const total_cat_chart = ['Party', 'Gender', 'CasteCategory', 'Religion'];
+export const CM_FILTER_FIELDS: FilterFieldDef[] = [
+  { id: 'name', label: 'Chief Minister Name', dataType: 'string', placeholder: 'e.g. Mamata Banerjee' },
+  { id: 'state', label: 'State / UT Name', dataType: 'string', placeholder: 'e.g. West Bengal' },
+  { id: 'party', label: 'Party Abbreviation', dataType: 'string', placeholder: 'e.g. BJP, INC, AAP' },
+  {
+    id: 'status',
+    label: 'Status (State vs UT)',
+    dataType: 'select',
+    options: [
+      { value: 'State', label: 'State' },
+      { value: 'UT', label: 'Union Territory' },
+    ],
+  },
+  {
+    id: 'gender',
+    label: 'Gender',
+    dataType: 'select',
+    options: [
+      { value: 'Male', label: 'Male' },
+      { value: 'Female', label: 'Female' },
+    ],
+  },
+  { id: 'religion', label: 'Religion', dataType: 'string', placeholder: 'e.g. Hindu, Muslim, Sikh' },
+  { id: 'highestEducation', label: 'Highest Education', dataType: 'string', placeholder: 'e.g. Post-Graduate, LL.B, Graduate' },
+  { id: 'university', label: 'University / Institute', dataType: 'string', placeholder: 'e.g. Calcutta University' },
+  { id: 'startDate', label: 'Term Start Date', dataType: 'date' },
+];
 
-//Map related constants
-const total_cat_map = ['Party', 'Gender', 'CasteCategory', 'Religion'];
+export const CM_DEFAULT_FIELDS = CM_FILTER_FIELDS;
 
-const CMs: React.FC = () => {  
-  const [selectedOptions, setSelectedOptions] = useState({
+const getEducationCategory = (eduRaw: string): string => {
+  const edu = (eduRaw || '').toLowerCase();
+  if (
+    edu.includes('ph.d') ||
+    edu.includes('m.a') ||
+    edu.includes('m.sc') ||
+    edu.includes('m.tech') ||
+    edu.includes('master') ||
+    edu.includes('mba')
+  ) {
+    return 'Post-Grad / Ph.D';
+  } else if (edu.includes('ll.b') || edu.includes('law')) {
+    return 'Law (LL.B)';
+  } else if (
+    edu.includes('bachelor') ||
+    edu.includes('b.sc') ||
+    edu.includes('b.com') ||
+    edu.includes('b.a') ||
+    edu.includes('b.tech') ||
+    edu.includes('b.b.a')
+  ) {
+    return 'Graduate';
+  } else {
+    return 'Others';
+  }
+};
+
+const CMs: React.FC = () => {
+  // 1. View Toggles (Table, Chart, Globe)
+  const [selectedViews, setSelectedViews] = useState({
     table: true,
-    map: false,
+    map: true,
     chart: true,
   });
 
-  // table related  
-  const [selectedColumns, setSelectedColumns] = useState<string[]>(defaultColumns);
+  // 2. Dynamically generated GraphQL query from cmsConfig
+  const CMS_GRAPHQL_QUERY = useMemo(() => buildGraphQLQuery(cmsConfig), []);
 
-  const {
-    data: tableData,
-    loading,
-    error,
-  } = useLazyTable(GET_ALL_CMS_Table, {
-    skip: !selectedOptions.table,
-    transform: (data) => data.allCmsTable ?? [],
+  // Fetch live data exclusively from GraphQL API
+  const { data, loading, error, refetch } = useQuery(CMS_GRAPHQL_QUERY, {
+    notifyOnNetworkStatusChange: true,
   });
 
-   const handleColumnChange = (updatedColumns: string[]) => {
-    setSelectedColumns(updatedColumns);
-   
+  // Map API response to CmRecord objects
+  const cmsList: CmRecord[] = useMemo(() => {
+    const rawList = data?.allCms?.data;
+    if (!rawList || !Array.isArray(rawList)) return [];
+
+    return rawList.map((item: any, idx: number) => ({
+      ...item,
+      id: item.id ?? idx + 1,
+      name: item.name ?? 'Unknown',
+      state: item.rulingstate?.Statename ?? 'Unknown',
+      status: item.rulingstate?.Status === 'UT' ? 'UT' : 'State',
+      party: item.party?.abbreviation || 'Others',
+      partyName: item.party?.partyname || 'Other Party',
+      partyColor: item.party?.partyColor || '#64748b',
+      rawParty: item.party,
+      gender: item.gender ?? 'Male',
+      religion: item.religion ?? 'Hindu',
+      highestEducation: item.HighestEducation ?? item.highestEducation ?? '-',
+      university: item.University ?? item.university ?? '-',
+      startDate: item.rulingperiods?.startdate ?? '-',
+      ispresent: item.ispresent ?? true,
+    }));
+  }, [data]);
+
+  // 3. Dynamically introspect filter fields and relations from backend GraphQL schema
+  const { availableFields } = useGraphQLFilterSchema(
+    cmsConfig.graphql.filterTypeName,
+    CM_FILTER_FIELDS
+  );
+
+  // --- FILTERS STATE ---
+  const [tableSearch, setTableSearch] = useState('');
+
+  // Interactive Chart-based Filter (Cross-filtering)
+  const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
+
+  // Advanced Filters State (Dynamic GraphQL Introspection)
+  const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
+  const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
+
+  const handleApplyAdvancedRules = () => {
+    setAppliedAdvancedRules([...advancedRules]);
+    setPage(0);
   };
-  
-  //chart related
-  const [selectedCategory, setSelectedCategory] = useState<string>('Party');  
-  const {
-    data: chartData,
-    loading:chartloading,
-    error:charterror,
-  } = useLazyTable(GET_CMS_Count, {
-    skip: !selectedOptions.table,
-    transform: (data) => data.cmCounts ?? {},
-  }); 
-    const handleSelectionChange = (newOptions: typeof selectedOptions) => {
-    setSelectedOptions(newOptions);
+
+  const handleResetAdvancedRules = () => {
+    setAdvancedRules([]);
+    setAppliedAdvancedRules([]);
+    setPage(0);
   };
-  
-  //Map related
-  const [selectedmapCategory, setSelectedmapCategory] = useState<string>('Party');  
 
-  return ( 
-      <IonPage id="main-content">
-        <IonHeader>
-          <IonToolbar>
-            <IonButtons slot="start">
-              <IonButton onClick={() => document.querySelector('ion-menu')?.open()}>
-                <IonIcon icon={menuOutline} />
-              </IonButton>
-            </IonButtons>
-            <IonTitle style={{ textShadow: '0px 5px 5px darkcyan' }}>Chief Ministers</IonTitle>
-          </IonToolbar>
-        </IonHeader>
+  const handleRemoveAdvancedRule = (idx: number) => {
+    const updated = appliedAdvancedRules.filter((_, i) => i !== idx);
+    setAppliedAdvancedRules(updated);
+    setAdvancedRules(updated);
+    setPage(0);
+  };
 
-        <IonContent fullscreen>
-        
-        <Selectable onSelectionChange={handleSelectionChange} />
+  const handleClearAll = () => {
+    setTableSearch('');
+    setChartFilter(null);
+    setAdvancedRules([]);
+    setAppliedAdvancedRules([]);
+    setPage(0);
+  };
 
-        {selectedOptions.table && (
-          <Tablecom 
-          totalColumns={totalColumns_table}
-            selectedColumns={selectedColumns}
-            tableData={tableData}
-            onColumnChange={handleColumnChange}
-            />
- 
-)}
+  const hasActiveFilters = Boolean(
+    tableSearch.trim() ||
+    chartFilter !== null ||
+    appliedAdvancedRules.some(
+      (r) =>
+        r.value.trim() !== '' ||
+        r.operator === 'is_empty' ||
+        r.operator === 'is_not_empty' ||
+        r.operator === 'is_true' ||
+        r.operator === 'is_false'
+    )
+  );
 
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (tableSearch.trim()) count++;
+    if (chartFilter !== null) count++;
+    count += appliedAdvancedRules.filter(
+      (r) =>
+        r.value.trim() !== '' ||
+        r.operator === 'is_empty' ||
+        r.operator === 'is_not_empty' ||
+        r.operator === 'is_true' ||
+        r.operator === 'is_false'
+    ).length;
+    return count;
+  }, [tableSearch, chartFilter, appliedAdvancedRules]);
 
+  // Table Columns, Sorting & Pagination
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(() =>
+    cmsConfig.tableColumns
+      .filter((c) => c.defaultVisible !== false)
+      .map((c) => c.id)
+  );
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [orderBy, setOrderBy] = useState<string>('state');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
-{selectedOptions.chart &&  chartData &&
-  chartData[selectedCategory] && (  
-    <Chartcom
-          data={chartData[selectedCategory]}
-          colorMap={selectedCategory === 'Party' ? chartData?.PartyColor ?? {} : {}}
-          selectedCategory={selectedCategory}
-          categoryOptions={total_cat_chart}
-          onCategoryChange={setSelectedCategory}
-        />
-)}
-{!selectedOptions.table && !selectedOptions.map && !selectedOptions.chart && (
-  <div className="view-section">
-    <h3 className="view-title">Select Table, Chart or Map at the right to know about me</h3>
-    <img src="/assets/images/cm.png" alt="No View" style={{ width: '300px', height: 'auto', marginTop: '20px' }} />
-  </div>
-)}
-{selectedOptions.map && (
-  <div className="view-section">
-  <h3 className="view-title">Globe View</h3>
-  <UnderConstruction/>
-  </div>
-)}
+  // 3. Base Filtered Data Source (Governs Charts: respects advanced rules and table search)
+  const baseFilteredData = useMemo(() => {
+    return cmsList.filter((cm) => {
+      // Table search
+      if (tableSearch.trim()) {
+        const query = tableSearch.toLowerCase().trim();
+        const matches =
+          cm.name.toLowerCase().includes(query) ||
+          cm.state.toLowerCase().includes(query) ||
+          cm.party.toLowerCase().includes(query) ||
+          cm.partyName.toLowerCase().includes(query) ||
+          cm.religion.toLowerCase().includes(query) ||
+          cm.highestEducation.toLowerCase().includes(query) ||
+          cm.university.toLowerCase().includes(query);
+        if (!matches) return false;
+      }
 
+      // Advanced condition rules evaluated dynamically via common evaluator
+      for (const rule of appliedAdvancedRules) {
+        const fieldDef =
+          availableFields.find((f) => f.id === rule.field) ||
+          CM_DEFAULT_FIELDS.find((f) => f.id === rule.field);
+        if (!evaluateFilterRule(cm, rule, fieldDef)) return false;
+      }
+
+      return true;
+    });
+  }, [cmsList, tableSearch, appliedAdvancedRules, availableFields]);
+
+  // 4. Final Filtered Data Source (Governs Data Table: base filtered + chart filter)
+  const filteredData = useMemo(() => {
+    return baseFilteredData
+      .filter((cm) => {
+        if (chartFilter) {
+          if (chartFilter.category === 'Party') {
+            if (chartFilter.value === 'Others') {
+              if (cm.party === 'BJP' || cm.party === 'INC') return false;
+            } else if (cm.party !== chartFilter.value) {
+              return false;
+            }
+          } else if (chartFilter.category === 'Gender') {
+            if (cm.gender !== chartFilter.value) return false;
+          } else if (chartFilter.category === 'Religion') {
+            if (cm.religion !== chartFilter.value) return false;
+          } else if (chartFilter.category === 'Education') {
+            const cat = getEducationCategory(cm.highestEducation);
+            if (cat !== chartFilter.value) return false;
+          }
+        }
+        return true;
+      })
+      .sort((a: any, b: any) => {
+        const valA = a[orderBy] || '';
+        const valB = b[orderBy] || '';
+        if (valA < valB) return order === 'asc' ? -1 : 1;
+        if (valA > valB) return order === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [baseFilteredData, chartFilter, order, orderBy]);
+
+  // Chart Click Handlers
+  const handleChartItemClick = (category: CategoryKey, key: string) => {
+    if (chartFilter && chartFilter.category === category && chartFilter.value === key) {
+      setChartFilter(null);
+    } else {
+      setChartFilter({ category, value: key });
+    }
+    setPage(0);
+  };
+
+  const handleCategoryTabChange = (cat: CategoryKey) => {
+    setSelectedCategory(cat);
+    setChartFilter(null);
+    setPage(0);
+  };
+
+  // 5. Dynamic Category Counts for Charts (Computed from baseFilteredData)
+  const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('Party');
+
+  const categoryCounts = useMemo(() => {
+    const partyCounts: Record<string, number> = {};
+    const genderCounts: Record<string, number> = {};
+    const religionCounts: Record<string, number> = {};
+    const educationCounts: Record<string, number> = {
+      'Post-Grad / Ph.D': 0,
+      'Law (LL.B)': 0,
+      'Graduate': 0,
+      'Others': 0,
+    };
+
+    baseFilteredData.forEach((cm) => {
+      // Party
+      partyCounts[cm.party] = (partyCounts[cm.party] || 0) + 1;
+
+      // Gender
+      genderCounts[cm.gender] = (genderCounts[cm.gender] || 0) + 1;
+
+      // Religion
+      religionCounts[cm.religion] = (religionCounts[cm.religion] || 0) + 1;
+
+      // Education category
+      const eduCat = getEducationCategory(cm.highestEducation);
+      if (educationCounts[eduCat] !== undefined) {
+        educationCounts[eduCat] += 1;
+      } else {
+        educationCounts['Others'] += 1;
+      }
+    });
+
+    return {
+      Party: partyCounts,
+      Gender: genderCounts,
+      Religion: religionCounts,
+      Education: educationCounts,
+    };
+  }, [baseFilteredData]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { State: 0, UT: 0 };
+    baseFilteredData.forEach((cm) => {
+      counts[cm.status] = (counts[cm.status] || 0) + 1;
+    });
+    return counts;
+  }, [baseFilteredData]);
+
+  const currentCategoryData = categoryCounts[selectedCategory] || {};
+  const currentTotal = Object.values(currentCategoryData).reduce((sum, n) => sum + n, 0);
+
+  // Dynamic color palette for categories
+  const categoryColors = useMemo(() => {
+    if (selectedCategory === 'Party') {
+      const backendColorMap: Record<string, string> = {};
+      cmsList.forEach((cm) => {
+        if (cm.party && cm.partyColor) {
+          backendColorMap[cm.party] = cm.partyColor;
+        }
+      });
+      const map: Record<string, string> = {};
+      Object.keys(currentCategoryData).forEach((key) => {
+        map[key] = backendColorMap[key] || '#64748b';
+      });
+      return map;
+    }
+    const palette = ['#2563eb', '#0d9488', '#f59e0b', '#ec4899', '#8b5cf6', '#10b981'];
+    const keys = Object.keys(currentCategoryData);
+    const map: Record<string, string> = {};
+    keys.forEach((key, idx) => {
+      map[key] = palette[idx % palette.length];
+    });
+    return map;
+  }, [currentCategoryData, selectedCategory, cmsList]);
+
+  // SVG Doughnut Calculation Helper
+  const doughnutSlices = useMemo(() => {
+    let accumulatedAngle = 0;
+    const entries = Object.entries(currentCategoryData);
+    return entries.map(([key, count]) => {
+      const percentage = currentTotal > 0 ? count / currentTotal : 0;
+      const strokeDash = `${percentage * 238.76} 238.76`;
+      const strokeOffset = -accumulatedAngle * 238.76;
+      accumulatedAngle += percentage;
+      return {
+        key,
+        count,
+        percentage: Math.round(percentage * 100),
+        color: categoryColors[key],
+        strokeDash,
+        strokeOffset,
+      };
+    });
+  }, [currentCategoryData, currentTotal, categoryColors]);
+
+  const handleSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const handleColumnChange = (event: any) => {
+    const val = event.target.value;
+    setSelectedColumns(typeof val === 'string' ? val.split(',') : val);
+  };
+
+  return (
+    <IonPage id="main-content">
+      {/* Top Header Toolbar */}
+      <IonHeader>
+        <IonToolbar>
+          <IonButtons slot="start">
+            <IonButton onClick={() => document.querySelector('ion-menu')?.open()}>
+              <IonIcon icon={menuOutline} />
+            </IonButton>
+          </IonButtons>
+          <div className="cms-toolbar-brand">
+            <img src="/assets/images/adhikar_logo.png" alt="Adhikar Politiaware Logo" className="cms-toolbar-logo" />
+            <IonTitle className="cms-toolbar-title">adhikar-politiaware &bull; Chief Ministers</IonTitle>
+          </div>
+        </IonToolbar>
+      </IonHeader>
+
+      <IonContent fullscreen className="cms-page-content">
+        <div className="cms-container">
+          {/* Hero Banner with Key Metrics */}
+          <div className="cms-hero-card">
+            <div className="cms-hero-text">
+              <div className="cms-hero-badge">
+                <span>🇮🇳</span>
+                <span>Executive Heads of State Governments</span>
+              </div>
+              <h1>Chief Ministers of India (Executive Directory)</h1>
+              <p>
+                Elected heads of government representing executive constitutional leadership and policy administration across Indian States and Union Territories with legislative assemblies.
+              </p>
+            </div>
+            <div className="cms-hero-kpi">
+              <div className="hero-stat-box">
+                <div className="hero-stat-num">{cmsList.length}</div>
+                <div className="hero-stat-label">Total CMs</div>
+              </div>
+              <div className="hero-stat-box">
+                <div className="hero-stat-num">{statusCounts['State'] || 0}</div>
+                <div className="hero-stat-label">States</div>
+              </div>
+              <div className="hero-stat-box">
+                <div className="hero-stat-num">{statusCounts['UT'] || 0}</div>
+                <div className="hero-stat-label">UT Assemblies</div>
+              </div>
+            </div>
+          </div>
+
+          {/* LOADING STATE */}
+          {loading && (
+            <div className="cms-loading-container">
+              <IonSpinner name="crescent" color="primary" style={{ width: 44, height: 44 }} />
+              <p className="loading-text">Loading Chief Ministers Records...</p>
+            </div>
+          )}
+
+          {/* ERROR STATE: Backend Server Unreachable */}
+          {!loading && error && (
+            <div className="cms-error-card">
+              <div className="error-icon-circle">
+                <IonIcon icon={alertCircleOutline} />
+              </div>
+              <h2 className="error-title">Backend Server Unreachable</h2>
+              <p className="error-message">
+                Unable to establish a connection to the backend service. Please check your network connection or verify that the server is running.
+              </p>
+              <div className="error-actions-row">
+                <button className="error-retry-btn" onClick={() => refetch()}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <IonIcon icon={refreshOutline} />
+                    Retry Connection
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* SUCCESS STATE: Render Content When Data Available */}
+          {!loading && !error && (
+            <>
+              {/* Interactive View Selector Component */}
+              <Selectable onSelectionChange={setSelectedViews} />
+
+              {/* ========================================================
+                  UNIVERSAL REUSABLE FILTERS SECTION (DYNAMIC GRAPHQL FIELDS)
+                 ======================================================== */}
+              <FilterSection
+                title="Filters & Query Controls"
+                subtitle="Refine directory and charts across dynamic constitutional and demographic parameters"
+                totalCount={cmsList.length}
+                filteredCount={filteredData.length}
+                availableFields={availableFields}
+                advancedRules={advancedRules}
+                onAdvancedRulesChange={setAdvancedRules}
+                appliedAdvancedRules={appliedAdvancedRules}
+                onApplyAdvancedRules={handleApplyAdvancedRules}
+                onResetAdvancedRules={handleResetAdvancedRules}
+                onClearAll={handleClearAll}
+                hasActiveFilters={hasActiveFilters}
+                activeFiltersCount={activeFiltersCount}
+                onRemoveAdvancedRule={handleRemoveAdvancedRule}
+                extraActiveChips={
+                  chartFilter
+                    ? [
+                        {
+                          id: `chart-${chartFilter.category}-${chartFilter.value}`,
+                          label:
+                            chartFilter.category === 'Party'
+                              ? 'Party'
+                              : chartFilter.category === 'Gender'
+                              ? 'Gender'
+                              : chartFilter.category === 'Religion'
+                              ? 'Religion'
+                              : 'Education',
+                          value: chartFilter.value,
+                          onRemove: () => setChartFilter(null),
+                        },
+                      ]
+                    : []
+                }
+              />
+
+              {/* ========================================================
+                  1. TOP SECTION: ANALYSIS CHART CANVAS + 300x250 GOOGLE AD
+                 ======================================================== */}
+              {selectedViews.chart && (
+                <section className="cms-charts-row">
+                  {/* Left Column: Chart Canvas */}
+                  <div className="chart-canvas-card">
+                    <div className="card-header-bar">
+                      <h3 className="card-header-title">
+                        <span className="card-header-accent"></span>
+                        <span>1. Analysis Charts (Pie & Bar Canvas)</span>
+                      </h3>
+
+                      {/* Category Selector Tabs */}
+                      <div className="chart-category-tabs">
+                        {cmsConfig.charts.map((chart) => (
+                          <button
+                            key={chart.key}
+                            className={`chart-cat-btn ${selectedCategory === chart.key ? 'active' : ''}`}
+                            onClick={() => handleCategoryTabChange(chart.key as CategoryKey)}
+                          >
+                            {chart.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Dual Visualizations Row */}
+                    <div className="visualizations-grid">
+                      {/* Left: SVG Doughnut Chart */}
+                      <div className="pie-visual-box">
+                        <span className="visual-box-title">
+                          Distribution Ratio
+                          {chartFilter && chartFilter.category === selectedCategory && (
+                            <span className="chart-active-filter-hint" style={{ fontSize: 10, color: '#2563eb', marginLeft: 6, fontWeight: 700 }}>
+                              (Filtered: {chartFilter.value})
+                            </span>
+                          )}
+                        </span>
+                        <div className="doughnut-wrapper">
+                          <svg className="doughnut-svg" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="38" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
+                            {doughnutSlices.map((slice) => {
+                              const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === slice.key;
+                              const isAnySelected = chartFilter?.category === selectedCategory;
+
+                              return (
+                                <circle
+                                  key={slice.key}
+                                  cx="50"
+                                  cy="50"
+                                  r="38"
+                                  fill="transparent"
+                                  stroke={slice.color}
+                                  strokeWidth={isSelected ? 16 : 12}
+                                  strokeDasharray={slice.strokeDash}
+                                  strokeDashoffset={slice.strokeOffset}
+                                  strokeLinecap="round"
+                                  style={{
+                                    cursor: 'pointer',
+                                    opacity: isAnySelected && !isSelected ? 0.35 : 1,
+                                    transition: 'all 0.25s ease',
+                                  }}
+                                  onClick={() => handleChartItemClick(selectedCategory, slice.key)}
+                                >
+                                  <title>{`Click to filter by ${slice.key} (${slice.count})`}</title>
+                                </circle>
+                              );
+                            })}
+                          </svg>
+                          <div className="doughnut-center-text">
+                            <span className="doughnut-total-num">{currentTotal}</span>
+                            <span className="doughnut-total-label">Total</span>
+                          </div>
+                        </div>
+
+                        {/* Doughnut Legend */}
+                        <div className="doughnut-legend">
+                          {doughnutSlices.map((slice) => {
+                            const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === slice.key;
+                            const isAnySelected = chartFilter?.category === selectedCategory;
+
+                            return (
+                              <div
+                                key={slice.key}
+                                className={`legend-item ${isSelected ? 'selected-legend-item' : ''}`}
+                                style={{
+                                  cursor: 'pointer',
+                                  opacity: isAnySelected && !isSelected ? 0.45 : 1,
+                                }}
+                                onClick={() => handleChartItemClick(selectedCategory, slice.key)}
+                                title={`Click to filter by ${slice.key}`}
+                              >
+                                <span className="legend-dot" style={{ backgroundColor: slice.color }}></span>
+                                <span>
+                                  {slice.key}: <strong>{slice.count}</strong> ({slice.percentage}%)
+                                </span>
+                                {isSelected && <span style={{ color: '#2563eb', fontWeight: 900, marginLeft: 2 }}>&#x2713;</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Right: Comparative Bar Representation */}
+                      <div className="bar-visual-box">
+                        <span className="visual-box-title">
+                          Comparative Counts
+                          {chartFilter && chartFilter.category === selectedCategory && (
+                            <span className="chart-active-filter-hint" style={{ fontSize: 10, color: '#2563eb', marginLeft: 6, fontWeight: 700 }}>
+                              (Filtered: {chartFilter.value})
+                            </span>
+                          )}
+                        </span>
+                        {Object.entries(currentCategoryData).map(([key, count]) => {
+                          const percentage = currentTotal > 0 ? Math.round((count / currentTotal) * 100) : 0;
+                          const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === key;
+                          const isAnySelected = chartFilter?.category === selectedCategory;
+
+                          return (
+                            <div
+                              key={key}
+                              className={`bar-item ${isSelected ? 'selected-bar-item' : ''}`}
+                              style={{
+                                cursor: 'pointer',
+                                opacity: isAnySelected && !isSelected ? 0.45 : 1,
+                              }}
+                              onClick={() => handleChartItemClick(selectedCategory, key)}
+                              title={`Click to filter by ${key}`}
+                            >
+                              <div className="bar-item-header">
+                                <span>
+                                  {key}
+                                  {isSelected && <span style={{ color: '#2563eb', fontWeight: 900, marginLeft: 6 }}>&#x2713;</span>}
+                                </span>
+                                <span>
+                                  <strong>{count}</strong> ({percentage}%)
+                                </span>
+                              </div>
+                              <div className="bar-track">
+                                <div
+                                  className="bar-fill"
+                                  style={{
+                                    width: `${percentage}%`,
+                                    backgroundColor: categoryColors[key] || '#2563eb',
+                                    boxShadow: isSelected ? '0 0 8px rgba(37, 99, 235, 0.4)' : undefined,
+                                  }}
+                                ></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: 300x250 Google Ad Slot */}
+                  <div className="cms-ad-card">
+                    <div className="ad-header-disclaimer">
+                      <span>SPONSORED</span>
+                      <span className="ad-choices-link">AdChoices &#x25B8;</span>
+                    </div>
+                    <div className="ad-box-300x250">
+                      <div className="ad-badge-sponsored">Google Partner Ad</div>
+                      <h4 className="ad-slot-title">PolitiAware Insights</h4>
+                      <p className="ad-slot-desc">
+                        Constitutional analytics, civic intelligence, and legislative transparency platform.
+                      </p>
+                      <button className="ad-cta-btn">Learn More</button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ========================================================
+                  2. MIDDLE SECTION: DATA TABLE RECORDS
+                 ======================================================== */}
+              {selectedViews.table && (
+                <section className="cms-table-card">
+                  {/* Table Controls & Column Customization */}
+                  <div className="table-controls-bar">
+                    <div className="table-title-group">
+                      <span className="card-header-accent"></span>
+                      <h3 className="card-header-title">2. Data Table Records</h3>
+                      <span className="filters-results-badge">
+                        Showing {filteredData.length} of {cmsList.length} Chief Ministers
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      {/* Search in table */}
+                      <div className="table-search-input">
+                        <IonIcon icon={searchOutline} style={{ color: '#94a3b8', marginRight: 8, fontSize: 16 }} />
+                        <input
+                          type="text"
+                          placeholder="Filter in results..."
+                          value={tableSearch}
+                          onChange={(e) => {
+                            setTableSearch(e.target.value);
+                            setPage(0);
+                          }}
+                        />
+                        {tableSearch && (
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                            onClick={() => { setTableSearch(''); setPage(0); }}
+                          >
+                            <IonIcon icon={closeOutline} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* MUI Column Visibility Customizer */}
+                      <div className="column-select-dropdown">
+                        <FormControl size="small" style={{ minWidth: 170 }}>
+                          <InputLabel id="cms-columns-select-label" style={{ fontSize: 12 }}>
+                            Columns
+                          </InputLabel>
+                          <Select
+                            labelId="cms-columns-select-label"
+                            multiple
+                            value={selectedColumns}
+                            onChange={handleColumnChange}
+                            renderValue={(selected) => `${(selected as string[]).length} Columns`}
+                            style={{ fontSize: 12, height: 36, background: '#ffffff' }}
+                          >
+                            {ALL_COLUMNS.map((col) => (
+                              <MenuItem key={col.id} value={col.id} style={{ fontSize: 12 }}>
+                                <Checkbox checked={selectedColumns.indexOf(col.id) > -1} size="small" />
+                                <ListItemText primary={col.label} primaryTypographyProps={{ fontSize: 12 }} />
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Responsive Scrollable Table */}
+                  <div style={{ overflowX: 'auto' }}>
+                    <Table className="cms-custom-table" size="small">
+                      <TableHead>
+                        <TableRow>
+                          {cmsConfig.tableColumns
+                            .filter((col) => selectedColumns.includes(col.id))
+                            .map((col) => (
+                              <TableCell key={col.id} align={col.align || 'left'} style={{ width: col.width }}>
+                                {col.sortable ? (
+                                  <TableSortLabel
+                                    active={orderBy === col.id}
+                                    direction={orderBy === col.id ? order : 'asc'}
+                                    onClick={() => handleSort(col.id)}
+                                  >
+                                    {col.label}
+                                  </TableSortLabel>
+                                ) : (
+                                  col.label
+                                )}
+                              </TableCell>
+                            ))}
+                        </TableRow>
+                      </TableHead>
+
+                      <TableBody>
+                        {filteredData
+                          .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                          .map((cm) => (
+                            <TableRow key={cm.id} hover>
+                              {cmsConfig.tableColumns
+                                .filter((col) => selectedColumns.includes(col.id))
+                                .map((col) => (
+                                  <TableCell key={col.id} align={col.align || 'left'}>
+                                    {renderCell(cm, col)}
+                                  </TableCell>
+                                ))}
+                            </TableRow>
+                          ))}
+
+                        {filteredData.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={selectedColumns.length} style={{ textAlign: 'center', padding: '48px 16px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                                <div style={{ fontSize: 32, color: '#94a3b8' }}>
+                                  <IonIcon icon={funnelOutline} />
+                                </div>
+                                <div style={{ fontSize: 14, fontWeight: 800, color: '#1e293b' }}>
+                                  No Chief Ministers Match the Active Filters
+                                </div>
+                                <div style={{ fontSize: 12, color: '#64748b', maxWidth: 360, lineHeight: 1.4 }}>
+                                  Try clearing your search query, adjusting quick party/status filters, or resetting advanced rules.
+                                </div>
+                                <button
+                                  onClick={handleClearAll}
+                                  style={{
+                                    marginTop: 6,
+                                    background: '#2563eb',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: 8,
+                                    padding: '8px 18px',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                  }}
+                                >
+                                  <IonIcon icon={closeCircleOutline} />
+                                  Clear All Filters
+                                </button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* MUI Table Pagination */}
+                  <TablePagination
+                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    component="div"
+                    count={filteredData.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={(_, newPage) => setPage(newPage)}
+                    onRowsPerPageChange={(e) => {
+                      setRowsPerPage(parseInt(e.target.value, 10));
+                      setPage(0);
+                    }}
+                    style={{ borderTop: '1px solid #f1f5f9' }}
+                  />
+                </section>
+              )}
+
+              {/* ========================================================
+                  3. BOTTOM SECTION: GLOBE VIEW - UNDER CONSTRUCTION
+                 ======================================================== */}
+              {selectedViews.map && (
+                <section className="cms-globe-section">
+                  <div className="globe-header">
+                    <h3 className="globe-header-title">
+                      <span className="card-header-accent"></span>
+                      <span>3. Globe View (Geospatial Mapping)</span>
+                    </h3>
+                  </div>
+                  <div className="globe-under-construction-banner">
+                    <div className="globe-icon-circle">🌍</div>
+                    <h4 className="globe-banner-title">Geospatial Globe View is Under Construction</h4>
+                    <p className="globe-banner-desc">
+                      Interactive 3D geospatial mapping and state boundary jurisdictions for India's Chief Ministers are currently in development.
+                    </p>
+                    <div className="globe-feature-pills">
+                      <span className="globe-feature-pill">📍 State Assembly Jurisdictions</span>
+                      <span className="globe-feature-pill">🗺️ Political Party Footprint</span>
+                      <span className="globe-feature-pill">📊 State Economic Metrics</span>
+                    </div>
+                  </div>
+                  <UnderConstruction />
+                </section>
+              )}
+            </>
+          )}
+        </div>
       </IonContent>
-      </IonPage>
- 
+    </IonPage>
   );
 };
 
 export default CMs;
+
