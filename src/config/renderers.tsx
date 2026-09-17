@@ -3,10 +3,18 @@ import { TableColumnConfig } from './types';
 import { getValueByPath } from './utils';
 
 
+export interface RenderCellCallbacks {
+  onViewDetails?: (record: any) => void;
+}
+
 /**
  * Renders a table cell content based on the column's configuration.
  */
-export function renderCell(record: any, column: TableColumnConfig): ReactNode {
+export function renderCell(
+  record: any,
+  column: TableColumnConfig,
+  callbacks?: RenderCellCallbacks
+): ReactNode {
   if (column.customRender) {
     const rawVal = column.field ? getValueByPath(record, column.field) : record[column.id];
     return column.customRender(rawVal, record);
@@ -75,7 +83,18 @@ export function renderCell(record: any, column: TableColumnConfig): ReactNode {
     }
 
     case 'actions': {
-      return <button className="action-btn-pill">View Profile</button>;
+      return (
+        <button
+          className="action-btn-pill"
+          onClick={(e) => {
+            e.stopPropagation();
+            callbacks?.onViewDetails?.(record);
+          }}
+          title="View comprehensive details"
+        >
+          View Details
+        </button>
+      );
     }
 
     case 'text':

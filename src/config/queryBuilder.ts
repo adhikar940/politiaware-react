@@ -96,8 +96,8 @@ export function buildGraphQLQuery(config: EntityConfig): DocumentNode {
     config.entityKey.charAt(0).toUpperCase() + config.entityKey.slice(1);
 
   const queryStr = `
-    query GetAll${queryNamePascal} {
-      ${config.graphql.queryName}(limit: 50, offset: 0) {
+    query GetAll${queryNamePascal}($limit: Int = 10, $offset: Int = 0, $search: String) {
+      ${config.graphql.queryName}(limit: $limit, offset: $offset, search: $search) {
         ${config.graphql.totalCountKey || 'total'}
         offset
         limit
@@ -110,6 +110,72 @@ ${selectionString}
 
   const parsedQuery = gql(queryStr);
   queryCache.set(cacheKey, parsedQuery);
+  return parsedQuery;
+}
+
+const chartQueryCache = new Map<string, DocumentNode>();
+
+/**
+ * Builds a lightweight GraphQL query requesting only fields needed for chart visualizations,
+ * retrieving all institutional records (up to 5000) for accurate percentage/distribution calculations.
+ */
+export function buildChartSummaryQuery(config: EntityConfig): DocumentNode {
+  const cacheKey = `chart_${config.entityKey}`;
+  if (chartQueryCache.has(cacheKey)) {
+    return chartQueryCache.get(cacheKey)!;
+  }
+
+  const fieldSet = new Set<string>();
+  fieldSet.add('id');
+
+  config.charts.forEach((chart) => {
+    if (chart.field) fieldSet.add(chart.field);
+  });
+
+  // Include party metadata only if party is present in this entity
+  const hasParty =
+    Array.from(fieldSet).some((f) => f.startsWith('party')) ||
+    config.tableColumns.some((c) => c.field?.startsWith('party')) ||
+    Boolean(config.graphql.extraFields?.some((f) => f.startsWith('party')));
+
+  if (hasParty) {
+    fieldSet.add('party.abbreviation');
+    fieldSet.add('party.partyname');
+    fieldSet.add('party.partyColor');
+  }
+
+  const allKnownFields = new Set([
+    ...config.tableColumns.map((c) => c.field),
+    ...config.charts.map((c) => c.field),
+    ...(config.graphql.extraFields || []),
+  ]);
+
+  if (allKnownFields.has('gender')) fieldSet.add('gender');
+  if (allKnownFields.has('religion')) fieldSet.add('religion');
+  if (allKnownFields.has('HighestEducation')) fieldSet.add('HighestEducation');
+  if (config.tableColumns.some((c) => c.field === 'rulingstate.Status' || c.id === 'status')) {
+    fieldSet.add('rulingstate.Status');
+  }
+
+  const tree = buildSelectionTree(Array.from(fieldSet));
+  const selectionString = treeToSelectionString(tree, 8);
+
+  const queryNamePascal =
+    config.entityKey.charAt(0).toUpperCase() + config.entityKey.slice(1);
+
+  const queryStr = `
+    query GetChartSummary${queryNamePascal}($limit: Int = 5000, $offset: Int = 0) {
+      ${config.graphql.queryName}(limit: $limit, offset: $offset) {
+        ${config.graphql.totalCountKey || 'total'}
+        ${config.graphql.rootDataKey || 'data'} {
+${selectionString}
+        }
+      }
+    }
+  `;
+
+  const parsedQuery = gql(queryStr);
+  chartQueryCache.set(cacheKey, parsedQuery);
   return parsedQuery;
 }
 

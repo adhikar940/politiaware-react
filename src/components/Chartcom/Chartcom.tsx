@@ -11,7 +11,7 @@ import {
 
 Chart.register(ChartDataLabels);
 
-type ChartComponentProps = {
+type ChartcomProps = {
   data: Record<string, number>;
   colorMap?: Record<string, string>;
   selectedCategory: string;
@@ -32,7 +32,7 @@ const Chartcom: React.FC<ChartcomProps> = ({
   const [chartSize, setChartSize] = useState<number>(400);
   const [colors, setColors] = useState<string[]>([]);
 
-  const total = Object.values(data).reduce((sum, val) => sum + val, 0);
+  const total: number = Object.values(data).reduce((sum: number, val: any) => sum + Number(val), 0);
 
   const generateColor = () =>
     `rgb(${Math.floor(Math.random() * 200)}, ${Math.floor(
@@ -96,7 +96,7 @@ const Chartcom: React.FC<ChartcomProps> = ({
           value={selectedCategory}
           onIonChange={(e) => onCategoryChange(e.detail.value)}
         >
-          {categoryOptions.map((cat) => (
+          {categoryOptions.map((cat: string) => (
             <IonSelectOption key={cat} value={cat}>
               {cat}
             </IonSelectOption>
@@ -110,7 +110,7 @@ const Chartcom: React.FC<ChartcomProps> = ({
           <canvas ref={canvasRef}></canvas>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {Object.entries(data).map(([key, value], idx) => (
+          {(Object.entries(data) as [string, number][]).map(([key, value], idx) => (
             <div
               key={key}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}

@@ -1,0 +1,107 @@
+import { EntityConfig } from './types';
+
+export const councilConfig: EntityConfig = {
+  entityKey: 'council',
+  title: 'State Legislative Councils (MLCs)',
+  graphql: {
+    queryName: 'allMLCs',
+    filterTypeName: 'AsyncFilterCouncilMlcDepth1',
+    rootDataKey: 'data',
+    totalCountKey: 'total',
+    extraFields: ['id', 'party.partyname', 'party.partyColor'],
+  },
+  charts: [
+    {
+      id: 'party',
+      key: 'Party',
+      title: 'Party Affiliation',
+      field: 'party.abbreviation',
+      chartType: 'doughnut',
+      hasBarView: true,
+      colorPalette: 'party',
+    },
+    {
+      id: 'gender',
+      key: 'Gender',
+      title: 'Gender Ratio',
+      field: 'gender',
+      chartType: 'doughnut',
+      hasBarView: false,
+    },
+    {
+      id: 'education',
+      key: 'Education',
+      title: 'Educational Level',
+      field: 'HighestEducation',
+      chartType: 'doughnut',
+      hasBarView: false,
+    },
+  ],
+  tableColumns: [
+    {
+      id: 'name',
+      label: 'MLC Name',
+      field: 'name',
+      sortable: true,
+      defaultVisible: true,
+    },
+    {
+      id: 'constituency',
+      label: 'Constituency',
+      field: 'constituencyName',
+      sortable: true,
+      defaultVisible: true,
+    },
+    {
+      id: 'state',
+      label: 'State',
+      field: 'state.Statename',
+      sortable: true,
+      defaultVisible: true,
+    },
+    {
+      id: 'party',
+      label: 'Party',
+      field: 'party.abbreviation',
+      sortable: true,
+      defaultVisible: true,
+      renderer: 'partyBadge',
+    },
+    {
+      id: 'gender',
+      label: 'Gender',
+      field: 'gender',
+      sortable: true,
+      defaultVisible: true,
+    },
+    {
+      id: 'elected',
+      label: 'Elected By / Category',
+      field: 'elected',
+      sortable: true,
+      defaultVisible: true,
+    },
+    {
+      id: 'highestEducation',
+      label: 'Highest Education',
+      field: 'HighestEducation',
+      sortable: true,
+      defaultVisible: true,
+    },
+    {
+      id: 'university',
+      label: 'University / Institute',
+      field: 'University',
+      sortable: true,
+      defaultVisible: false,
+    },
+    {
+      id: 'actions',
+      label: 'Actions',
+      sortable: false,
+      defaultVisible: true,
+      renderer: 'actions',
+    },
+  ],
+};
+

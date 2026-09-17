@@ -5,3 +5,7 @@ export * from './queryBuilder';
 export * from './appConfig';
 export { cmsConfig } from './cms.config';
 export { governorsConfig } from './governors.config';
+export { loksabhaConfig } from './loksabha.config';
+export { rajyasabhaConfig } from './rajyasabha.config';
+export { assemblyConfig } from './assembly.config';
+export { councilConfig } from './council.config';

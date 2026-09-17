@@ -36,13 +36,14 @@ import {
   TableSortLabel,
 } from '@mui/material';
 
-import { cmsConfig, buildGraphQLQuery, renderCell } from '../../config';
+import { cmsConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
 import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
 import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
 import { evaluateFilterRule } from '../../components/FilterSection/filterEvaluator';
 import { useGraphQLFilterSchema } from '../../components/FilterSection/useGraphQLFilterSchema';
+import { EntityDetailModal } from '../../components/EntityDetailModal/EntityDetailModal';
 import './CMs.css';
 
 export interface CmRecord {
@@ -134,15 +135,39 @@ const CMs: React.FC = () => {
     chart: true,
   });
 
+  // 1. Pagination, Search & Filter state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [tableSearch, setTableSearch] = useState('');
+  const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
+  const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
+  const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
+
   // 2. Dynamically generated GraphQL query from cmsConfig
   const CMS_GRAPHQL_QUERY = useMemo(() => buildGraphQLQuery(cmsConfig), []);
+  const CMS_CHART_QUERY = useMemo(() => buildChartSummaryQuery(cmsConfig), []);
 
-  // Fetch live data exclusively from GraphQL API
+  // Server-side paginated query for table (limit, offset, search)
   const { data, loading, error, refetch } = useQuery(CMS_GRAPHQL_QUERY, {
+    variables: {
+      limit: rowsPerPage,
+      offset: page * rowsPerPage,
+      search: tableSearch.trim() || undefined,
+    },
     notifyOnNetworkStatusChange: true,
   });
 
-  // Map API response to CmRecord objects
+  // Full institutional summary query for charts (31 members)
+  const { data: chartData } = useQuery(CMS_CHART_QUERY, {
+    variables: {
+      limit: 5000,
+      offset: 0,
+    },
+  });
+
+  const totalCount = data?.allCms?.total ?? 31;
+
+  // Map API response to CmRecord objects (current page batch)
   const cmsList: CmRecord[] = useMemo(() => {
     const rawList = data?.allCms?.data;
     if (!rawList || !Array.isArray(rawList)) return [];
@@ -166,21 +191,31 @@ const CMs: React.FC = () => {
     }));
   }, [data]);
 
+  // Full dataset for charts
+  const chartCmsList = useMemo(() => {
+    const rawList = chartData?.allCms?.data;
+    if (!rawList || !Array.isArray(rawList)) return cmsList;
+
+    return rawList.map((item: any, idx: number) => ({
+      ...item,
+      id: item.id ?? idx + 1,
+      name: item.name ?? 'Unknown',
+      state: item.rulingstate?.Statename ?? 'Unknown',
+      status: item.rulingstate?.Status === 'UT' ? 'UT' : 'State',
+      party: item.party?.abbreviation || 'Others',
+      partyName: item.party?.partyname || 'Other Party',
+      partyColor: item.party?.partyColor || '#64748b',
+      gender: item.gender ?? 'Male',
+      religion: item.religion ?? 'Hindu',
+      highestEducation: item.HighestEducation ?? item.highestEducation ?? '-',
+    }));
+  }, [chartData, cmsList]);
+
   // 3. Dynamically introspect filter fields and relations from backend GraphQL schema
   const { availableFields } = useGraphQLFilterSchema(
     cmsConfig.graphql.filterTypeName,
     CM_FILTER_FIELDS
   );
-
-  // --- FILTERS STATE ---
-  const [tableSearch, setTableSearch] = useState('');
-
-  // Interactive Chart-based Filter (Cross-filtering)
-  const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
-
-  // Advanced Filters State (Dynamic GraphQL Introspection)
-  const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
-  const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
 
   const handleApplyAdvancedRules = () => {
     setAppliedAdvancedRules([...advancedRules]);
@@ -244,8 +279,7 @@ const CMs: React.FC = () => {
   );
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [orderBy, setOrderBy] = useState<string>('state');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [selectedDetailRecord, setSelectedDetailRecord] = useState<any | null>(null);
 
   // 3. Base Filtered Data Source (Governs Charts: respects advanced rules and table search)
   const baseFilteredData = useMemo(() => {
@@ -337,7 +371,7 @@ const CMs: React.FC = () => {
       'Others': 0,
     };
 
-    baseFilteredData.forEach((cm) => {
+    chartCmsList.forEach((cm) => {
       // Party
       partyCounts[cm.party] = (partyCounts[cm.party] || 0) + 1;
 
@@ -362,15 +396,15 @@ const CMs: React.FC = () => {
       Religion: religionCounts,
       Education: educationCounts,
     };
-  }, [baseFilteredData]);
+  }, [chartCmsList]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { State: 0, UT: 0 };
-    baseFilteredData.forEach((cm) => {
+    chartCmsList.forEach((cm) => {
       counts[cm.status] = (counts[cm.status] || 0) + 1;
     });
     return counts;
-  }, [baseFilteredData]);
+  }, [chartCmsList]);
 
   const currentCategoryData = categoryCounts[selectedCategory] || {};
   const currentTotal = Object.values(currentCategoryData).reduce((sum, n) => sum + n, 0);
@@ -379,7 +413,7 @@ const CMs: React.FC = () => {
   const categoryColors = useMemo(() => {
     if (selectedCategory === 'Party') {
       const backendColorMap: Record<string, string> = {};
-      cmsList.forEach((cm) => {
+      chartCmsList.forEach((cm) => {
         if (cm.party && cm.partyColor) {
           backendColorMap[cm.party] = cm.partyColor;
         }
@@ -397,7 +431,7 @@ const CMs: React.FC = () => {
       map[key] = palette[idx % palette.length];
     });
     return map;
-  }, [currentCategoryData, selectedCategory, cmsList]);
+  }, [currentCategoryData, selectedCategory, chartCmsList]);
 
   // SVG Doughnut Calculation Helper
   const doughnutSlices = useMemo(() => {
@@ -463,7 +497,7 @@ const CMs: React.FC = () => {
             </div>
             <div className="cms-hero-kpi">
               <div className="hero-stat-box">
-                <div className="hero-stat-num">{cmsList.length}</div>
+                <div className="hero-stat-num">{totalCount}</div>
                 <div className="hero-stat-label">Total CMs</div>
               </div>
               <div className="hero-stat-box">
@@ -518,7 +552,7 @@ const CMs: React.FC = () => {
               <FilterSection
                 title="Filters & Query Controls"
                 subtitle="Refine directory and charts across dynamic constitutional and demographic parameters"
-                totalCount={cmsList.length}
+                totalCount={totalCount}
                 filteredCount={filteredData.length}
                 availableFields={availableFields}
                 advancedRules={advancedRules}
@@ -736,7 +770,7 @@ const CMs: React.FC = () => {
                       <span className="card-header-accent"></span>
                       <h3 className="card-header-title">2. Data Table Records</h3>
                       <span className="filters-results-badge">
-                        Showing {filteredData.length} of {cmsList.length} Chief Ministers
+                        Showing {totalCount > 0 ? page * rowsPerPage + 1 : 0}-{Math.min((page + 1) * rowsPerPage, totalCount)} of {totalCount} Chief Ministers
                       </span>
                     </div>
 
@@ -815,19 +849,24 @@ const CMs: React.FC = () => {
                       </TableHead>
 
                       <TableBody>
-                        {filteredData
-                          .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                          .map((cm) => (
-                            <TableRow key={cm.id} hover>
-                              {cmsConfig.tableColumns
-                                .filter((col) => selectedColumns.includes(col.id))
-                                .map((col) => (
-                                  <TableCell key={col.id} align={col.align || 'left'}>
-                                    {renderCell(cm, col)}
-                                  </TableCell>
-                                ))}
-                            </TableRow>
-                          ))}
+                        {filteredData.map((cm) => (
+                          <TableRow
+                            key={cm.id}
+                            hover
+                            onClick={() => setSelectedDetailRecord(cm)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {cmsConfig.tableColumns
+                              .filter((col) => selectedColumns.includes(col.id))
+                              .map((col) => (
+                                <TableCell key={col.id} align={col.align || 'left'}>
+                                  {renderCell(cm, col, {
+                                    onViewDetails: (record) => setSelectedDetailRecord(record),
+                                  })}
+                                </TableCell>
+                              ))}
+                          </TableRow>
+                        ))}
 
                         {filteredData.length === 0 && (
                           <TableRow>
@@ -872,9 +911,9 @@ const CMs: React.FC = () => {
 
                   {/* MUI Table Pagination */}
                   <TablePagination
-                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    rowsPerPageOptions={[5, 10, 25, 50, 100]}
                     component="div"
-                    count={filteredData.length}
+                    count={totalCount}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_, newPage) => setPage(newPage)}
@@ -916,6 +955,14 @@ const CMs: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Entity Details Modal */}
+        <EntityDetailModal
+          open={Boolean(selectedDetailRecord)}
+          onClose={() => setSelectedDetailRecord(null)}
+          record={selectedDetailRecord}
+          entityType="Chief Minister"
+        />
       </IonContent>
     </IonPage>
   );

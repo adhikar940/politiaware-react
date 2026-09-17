@@ -5,8 +5,10 @@ import SideMenu from './components/SideMenu/SideMenu';
 import Home from './pages/Home/Home';
 import CMs from './pages/CMs/CMs';
 import Loksabha from './pages/Loksabha/Loksabha';
-import EntityPlaceholder from './pages/EntityPlaceholder/EntityPlaceholder';
 import Governors from './pages/Governors/Governors';
+import Rajyasabha from './pages/Rajyasabha/Rajyasabha';
+import Assembly from './pages/Assembly/Assembly';
+import Council from './pages/Council/Council';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -41,18 +43,9 @@ const App: React.FC = () => {
           <Route path="/CMs" element={<CMs />} />
           <Route path="/Loksabha" element={<Loksabha />} />
           <Route path="/Governors" element={<Governors />} />
-          <Route
-            path="/Rajyasabha"
-            element={<EntityPlaceholder title="Rajya Sabha Members" count={244} queryName="allRajyasabhaMPs(limit: 10, offset: 0)" />}
-          />
-          <Route
-            path="/Assembly"
-            element={<EntityPlaceholder title="State Legislative Assemblies (MLAs)" count="4,108" queryName="allMLAs(limit: 10, offset: 0)" />}
-          />
-          <Route
-            path="/Council"
-            element={<EntityPlaceholder title="State Legislative Councils (MLCs)" count={408} queryName="allMLCs(limit: 10, offset: 0)" />}
-          />
+          <Route path="/Rajyasabha" element={<Rajyasabha />} />
+          <Route path="/Assembly" element={<Assembly />} />
+          <Route path="/Council" element={<Council />} />
         </IonRouterOutlet>
       </IonReactRouter>
     </IonApp>

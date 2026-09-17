@@ -36,13 +36,14 @@ import {
   TableSortLabel,
 } from '@mui/material';
 
-import { governorsConfig, buildGraphQLQuery, renderCell } from '../../config';
+import { governorsConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
 import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
 import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
 import { evaluateFilterRule } from '../../components/FilterSection/filterEvaluator';
 import { useGraphQLFilterSchema } from '../../components/FilterSection/useGraphQLFilterSchema';
+import { EntityDetailModal } from '../../components/EntityDetailModal/EntityDetailModal';
 import './Governors.css';
 
 export interface GovernorRecord {
@@ -132,21 +133,39 @@ const Governors: React.FC = () => {
     chart: true,
   });
 
+  // 1. Pagination, Search & Filter state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [tableSearch, setTableSearch] = useState('');
+  const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
+  const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
+  const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
+
   // 2. Dynamically generated GraphQL query from governorsConfig
   const GOVERNORS_GRAPHQL_QUERY = useMemo(() => buildGraphQLQuery(governorsConfig), []);
+  const GOVERNORS_CHART_QUERY = useMemo(() => buildChartSummaryQuery(governorsConfig), []);
 
-  // Fetch live data exclusively from GraphQL API
+  // Server-side paginated query for table (limit, offset, search)
   const { data, loading, error, refetch } = useQuery(GOVERNORS_GRAPHQL_QUERY, {
+    variables: {
+      limit: rowsPerPage,
+      offset: page * rowsPerPage,
+      search: tableSearch.trim() || undefined,
+    },
     notifyOnNetworkStatusChange: true,
   });
 
-  // 3. Dynamically introspect filter fields and relations from backend GraphQL schema
-  const { availableFields } = useGraphQLFilterSchema(
-    governorsConfig.graphql.filterTypeName,
-    GOVERNOR_DEFAULT_FIELDS
-  );
+  // Full institutional summary query for charts (37 members)
+  const { data: chartData } = useQuery(GOVERNORS_CHART_QUERY, {
+    variables: {
+      limit: 5000,
+      offset: 0,
+    },
+  });
 
-  // Map API response to GovernorRecord objects
+  const totalCount = data?.allGovernors?.total ?? 37;
+
+  // Map API response to GovernorRecord objects (current page batch)
   const governorsList: GovernorRecord[] = useMemo(() => {
     const rawList = data?.allGovernors?.data;
     if (!rawList || !Array.isArray(rawList)) return [];
@@ -171,15 +190,27 @@ const Governors: React.FC = () => {
     }));
   }, [data]);
 
-  // --- FILTERS STATE ---
-  const [tableSearch, setTableSearch] = useState('');
+  // Full dataset for charts
+  const chartGovernorsList = useMemo(() => {
+    const rawList = chartData?.allGovernors?.data;
+    if (!rawList || !Array.isArray(rawList)) return governorsList;
 
-  // Interactive Chart-based Filter (Cross-filtering)
-  const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
+    return rawList.map((item: any, idx: number) => ({
+      id: item.id ?? idx + 1,
+      name: item.name ?? 'Unknown',
+      state: item.rulingstate?.Statename ?? 'Unknown',
+      status: item.rulingstate?.Status === 'UT' ? 'UT' : 'State',
+      gender: item.gender ?? 'Male',
+      religion: item.religion ?? 'Hindu',
+      highestEducation: item.HighestEducation ?? item.highestEducation ?? '-',
+    }));
+  }, [chartData, governorsList]);
 
-  // Advanced Filters State (Dynamic GraphQL Introspection)
-  const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
-  const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
+  // 3. Dynamically introspect filter fields and relations from backend GraphQL schema
+  const { availableFields } = useGraphQLFilterSchema(
+    governorsConfig.graphql.filterTypeName,
+    GOVERNOR_DEFAULT_FIELDS
+  );
 
   const handleApplyAdvancedRules = () => {
     setAppliedAdvancedRules([...advancedRules]);
@@ -243,8 +274,7 @@ const Governors: React.FC = () => {
   );
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [orderBy, setOrderBy] = useState<string>('state');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [selectedDetailRecord, setSelectedDetailRecord] = useState<any | null>(null);
 
   // 3. Base Filtered Data Source (Governs Charts: respects advanced rules and table search)
   const baseFilteredData = useMemo(() => {
@@ -331,7 +361,7 @@ const Governors: React.FC = () => {
       'Others': 0,
     };
 
-    baseFilteredData.forEach((gov) => {
+    chartGovernorsList.forEach((gov) => {
       // Gender
       genderCounts[gov.gender] = (genderCounts[gov.gender] || 0) + 1;
 
@@ -352,15 +382,15 @@ const Governors: React.FC = () => {
       Religion: religionCounts,
       Education: educationCounts,
     };
-  }, [baseFilteredData]);
+  }, [chartGovernorsList]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { State: 0, UT: 0 };
-    baseFilteredData.forEach((gov) => {
+    chartGovernorsList.forEach((gov) => {
       counts[gov.status] = (counts[gov.status] || 0) + 1;
     });
     return counts;
-  }, [baseFilteredData]);
+  }, [chartGovernorsList]);
 
   const currentCategoryData = categoryCounts[selectedCategory] || {};
   const currentTotal = Object.values(currentCategoryData).reduce((sum, n) => sum + n, 0);
@@ -440,7 +470,7 @@ const Governors: React.FC = () => {
             </div>
             <div className="governors-hero-kpi">
               <div className="hero-stat-box">
-                <div className="hero-stat-num">{governorsList.length}</div>
+                <div className="hero-stat-num">{totalCount}</div>
                 <div className="hero-stat-label">Total Governors</div>
               </div>
               <div className="hero-stat-box">
@@ -495,7 +525,7 @@ const Governors: React.FC = () => {
               <FilterSection
                 title="Filters & Query Controls"
                 subtitle="Refine directory and charts across dynamically introspected constitutional and demographic parameters"
-                totalCount={governorsList.length}
+                totalCount={totalCount}
                 filteredCount={filteredData.length}
                 availableFields={availableFields}
                 advancedRules={advancedRules}
@@ -711,7 +741,7 @@ const Governors: React.FC = () => {
                       <span className="card-header-accent"></span>
                       <h3 className="card-header-title">2. Data Table Records</h3>
                       <span className="filters-results-badge">
-                        Showing {filteredData.length} of {governorsList.length} Governors
+                        Showing {totalCount > 0 ? page * rowsPerPage + 1 : 0}-{Math.min((page + 1) * rowsPerPage, totalCount)} of {totalCount} Governors
                       </span>
                     </div>
 
@@ -790,19 +820,24 @@ const Governors: React.FC = () => {
                       </TableHead>
 
                       <TableBody>
-                        {filteredData
-                          .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                          .map((gov) => (
-                            <TableRow key={gov.id} hover>
-                              {governorsConfig.tableColumns
-                                .filter((col) => selectedColumns.includes(col.id))
-                                .map((col) => (
-                                  <TableCell key={col.id} align={col.align || 'left'}>
-                                    {renderCell(gov, col)}
-                                  </TableCell>
-                                ))}
-                            </TableRow>
-                          ))}
+                        {filteredData.map((gov) => (
+                          <TableRow
+                            key={gov.id}
+                            hover
+                            onClick={() => setSelectedDetailRecord(gov)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {governorsConfig.tableColumns
+                              .filter((col) => selectedColumns.includes(col.id))
+                              .map((col) => (
+                                <TableCell key={col.id} align={col.align || 'left'}>
+                                  {renderCell(gov, col, {
+                                    onViewDetails: (record) => setSelectedDetailRecord(record),
+                                  })}
+                                </TableCell>
+                              ))}
+                          </TableRow>
+                        ))}
 
                         {filteredData.length === 0 && (
                           <TableRow>
@@ -847,9 +882,9 @@ const Governors: React.FC = () => {
 
                   {/* MUI Table Pagination */}
                   <TablePagination
-                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    rowsPerPageOptions={[5, 10, 25, 50, 100]}
                     component="div"
-                    count={filteredData.length}
+                    count={totalCount}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_, newPage) => setPage(newPage)}
@@ -891,6 +926,14 @@ const Governors: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Entity Details Modal */}
+        <EntityDetailModal
+          open={Boolean(selectedDetailRecord)}
+          onClose={() => setSelectedDetailRecord(null)}
+          record={selectedDetailRecord}
+          entityType="Governor"
+        />
       </IonContent>
     </IonPage>
   );
