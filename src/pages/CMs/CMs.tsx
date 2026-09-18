@@ -748,7 +748,7 @@ const CMs: React.FC = () => {
                       <span className="ad-choices-link">AdChoices &#x25B8;</span>
                     </div>
                     <div className="ad-box-300x250">
-                      <div className="ad-badge-sponsored">Google Partner Ad</div>
+                      <div className="ad-badge-sponsored">Sponsored</div>
                       <h4 className="ad-slot-title">PolitiAware Insights</h4>
                       <p className="ad-slot-desc">
                         Constitutional analytics, civic intelligence, and legislative transparency platform.

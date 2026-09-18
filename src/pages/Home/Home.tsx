@@ -244,9 +244,9 @@ const Home: React.FC = () => {
               </div>
               <div className="home-ads-slot-300x250">
                 <div className="ad-icon-box">📢</div>
-                <h4 className="ad-title">Google AdSense Partner</h4>
+                <h4 className="ad-title">Ad Placement</h4>
                 <p className="ad-subtitle">300 &times; 250 Medium Rectangle</p>
-                <button className="ad-cta-btn">Sponsored Content</button>
+                <button className="ad-cta-btn">Ad Placement</button>
                 <span className="ad-disclaimer">Reserved ad placement area</span>
               </div>
             </div>

@@ -641,9 +641,9 @@ const Assembly: React.FC = () => {
                     </div>
                     <div className="assembly-ads-slot-300x250">
                       <div style={{ fontSize: 32, marginBottom: 8 }}>📢</div>
-                      <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px 0', color: '#0f172a' }}>Google AdSense Partner</h4>
+                      <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px 0', color: '#0f172a' }}>Ad Placement</h4>
                       <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px 0' }}>300 × 250 Medium Rectangle</p>
-                      <button className="action-btn-pill">Sponsored Content</button>
+                      <button className="action-btn-pill">Ad Placement</button>
                     </div>
                   </div>
                 </section>
