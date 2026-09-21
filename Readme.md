@@ -122,7 +122,30 @@ Every time you make changes and rebuild (`npm run build`), sync native projects:
 npx cap sync
 ```
 
-### Step 4: Open in Native IDE / Run on Device
+### Step 4: GitHub Actions deployment
+
+The workflow in `.github/workflows/build-and-deploy.yml` runs only when you
+manually start it. It builds the selected branch twice:
+
+- deploys `dist/` to Cloudflare Pages;
+- builds a debug Android APK and publishes it as a workflow artifact.
+
+Configure these GitHub repository values before the first run:
+
+- Secret `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with Pages edit access;
+- Secret `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID;
+- Repository variable `CLOUDFLARE_PAGES_PROJECT`: the Cloudflare Pages project name.
+
+To deploy, open the repository's **Actions** tab, select **Build and deploy**,
+click **Run workflow**, choose the branch, and click **Run workflow** again.
+Normal pushes will not deploy automatically.
+
+Download the APK from the completed workflow's **Artifacts** section. A debug
+APK is suitable for testing. Publishing a release AAB to Google Play requires
+an Android signing key and Google Play service-account credentials, which should
+be added as GitHub secrets separately.
+
+### Step 5: Open in Native IDE / Run on Device
 
 - **Android (Android Studio)**:
   ```bash

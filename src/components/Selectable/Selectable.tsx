@@ -24,7 +24,7 @@ const Selectable: React.FC<SelectableProps> = ({ onSelectionChange }) => {
 
   const [options, setOptions] = useState<Options>({
     table: true,
-    map: true,
+    map: false,
     chart: true,
   });
 
@@ -74,13 +74,14 @@ const Selectable: React.FC<SelectableProps> = ({ onSelectionChange }) => {
               />
               <span style={{ marginLeft: '8px' }}>Table</span>
             </IonItem>
-            <IonItem lines="none">
+            {/* Map view option commented out while under construction */}
+            {/* <IonItem lines="none">
               <IonCheckbox
                 checked={options.map}
                 onIonChange={() => toggleOption('map')}
               />
               <span style={{ marginLeft: '8px' }}>Map</span>
-            </IonItem>
+            </IonItem> */}
             <IonItem lines="none">
               <IonCheckbox
                 checked={options.chart}

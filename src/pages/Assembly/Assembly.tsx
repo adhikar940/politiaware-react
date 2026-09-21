@@ -38,7 +38,7 @@ import {
 
 import { assemblyConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
-import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
+// import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
 import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
 import { evaluateFilterRule } from '../../components/FilterSection/filterEvaluator';
@@ -115,7 +115,7 @@ const getEducationCategory = (edu: string): string => {
 const Assembly: React.FC = () => {
   const [selectedViews, setSelectedViews] = useState({
     table: true,
-    map: true,
+    map: false,
     chart: true,
   });
 
@@ -824,8 +824,8 @@ const Assembly: React.FC = () => {
                 </section>
               )}
 
-              {/* 3. GLOBE VIEW */}
-              {selectedViews.map && (
+              {/* 3. GLOBE VIEW - UNDER CONSTRUCTION (COMMENTED OUT) */}
+              {/* {selectedViews.map && (
                 <section className="assembly-globe-section">
                   <div className="globe-header">
                     <h3 className="globe-header-title">
@@ -847,7 +847,7 @@ const Assembly: React.FC = () => {
                   </div>
                   <UnderConstruction />
                 </section>
-              )}
+              )} */}
             </>
           )}
         </div>
