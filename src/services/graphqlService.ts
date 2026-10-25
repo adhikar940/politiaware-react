@@ -3,6 +3,7 @@ import {
   getSecondaryGraphQLUrl,
   getPrimaryTimeoutMs,
   getSecondaryTimeoutMs,
+  getRetryTimeoutMs,
   loadConfig,
 } from '../config';
 import { fetchWithFailover } from './fetchWithFailover';
@@ -14,6 +15,7 @@ export async function fetchGraphQL<T = any>(query: string, variables?: Record<st
   const secondaryEndpoint = getSecondaryGraphQLUrl();
   const primaryTimeoutMs = getPrimaryTimeoutMs();
   const secondaryTimeoutMs = getSecondaryTimeoutMs();
+  const retryTimeoutMs = getRetryTimeoutMs();
 
   if (!primaryEndpoint) throw new Error('GraphQL endpoint not defined');
 
@@ -28,7 +30,8 @@ export async function fetchGraphQL<T = any>(query: string, variables?: Record<st
       body: JSON.stringify({ query, variables }),
     },
     primaryTimeoutMs,
-    secondaryTimeoutMs
+    secondaryTimeoutMs,
+    retryTimeoutMs
   );
 
   const json = await response.json();

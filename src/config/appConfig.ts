@@ -3,7 +3,8 @@ import { Capacitor } from '@capacitor/core';
 export const PRIMARY_GRAPHQL_ENDPOINT = 'https://politiaware-api-render.samadhikar.com/graphql/async/';
 export const SECONDARY_GRAPHQL_ENDPOINT = 'https://politiaware-api-gcp.samadhikar.com/graphql/async/';
 export const DEFAULT_PRIMARY_TIMEOUT_MS = 2000;
-export const DEFAULT_SECONDARY_TIMEOUT_MS = 3000;
+export const DEFAULT_SECONDARY_TIMEOUT_MS = 5000;
+export const DEFAULT_RETRY_TIMEOUT_MS = 5000;
 
 // Backward-compatible alias
 export const DEFAULT_GRAPHQL_ENDPOINT = PRIMARY_GRAPHQL_ENDPOINT;
@@ -13,6 +14,7 @@ export interface AppConfig {
   SECONDARY_GRAPHQL_BACKENDURL?: string;
   PRIMARY_TIMEOUT_MS?: number;
   SECONDARY_TIMEOUT_MS?: number;
+  RETRY_TIMEOUT_MS?: number;
   MIN_APP_VERSION?: string;
   LATEST_APP_VERSION?: string;
   MIN_ANDROID_VERSION?: string;
@@ -27,6 +29,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   SECONDARY_GRAPHQL_BACKENDURL: SECONDARY_GRAPHQL_ENDPOINT,
   PRIMARY_TIMEOUT_MS: DEFAULT_PRIMARY_TIMEOUT_MS,
   SECONDARY_TIMEOUT_MS: DEFAULT_SECONDARY_TIMEOUT_MS,
+  RETRY_TIMEOUT_MS: DEFAULT_RETRY_TIMEOUT_MS,
   MIN_APP_VERSION: '0.0.1',
   LATEST_APP_VERSION: '0.0.1',
   FORCE_UPDATE: false,
@@ -103,6 +106,21 @@ export const getSecondaryTimeoutMs = (): number => {
   }
 
   return DEFAULT_SECONDARY_TIMEOUT_MS;
+};
+
+export const getRetryTimeoutMs = (): number => {
+  if (typeof config?.RETRY_TIMEOUT_MS === 'number' && config.RETRY_TIMEOUT_MS > 0) {
+    return config.RETRY_TIMEOUT_MS;
+  }
+
+  if (import.meta.env.VITE_RETRY_TIMEOUT_MS) {
+    const parsed = parseInt(import.meta.env.VITE_RETRY_TIMEOUT_MS, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return DEFAULT_RETRY_TIMEOUT_MS;
 };
 
 export const loadConfig = async (): Promise<AppConfig> => {

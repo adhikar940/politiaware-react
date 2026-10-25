@@ -7,6 +7,7 @@ import {
   getSecondaryGraphQLUrl,
   getPrimaryTimeoutMs,
   getSecondaryTimeoutMs,
+  getRetryTimeoutMs,
   loadConfig,
 } from './config';
 import { fetchWithFailover } from './services/fetchWithFailover';
@@ -23,7 +24,15 @@ const httpLink = createHttpLink({
     const secondaryUrl = getSecondaryGraphQLUrl();
     const primaryTimeoutMs = getPrimaryTimeoutMs();
     const secondaryTimeoutMs = getSecondaryTimeoutMs();
-    return fetchWithFailover(primaryUrl, secondaryUrl, init, primaryTimeoutMs, secondaryTimeoutMs);
+    const retryTimeoutMs = getRetryTimeoutMs();
+    return fetchWithFailover(
+      primaryUrl,
+      secondaryUrl,
+      init,
+      primaryTimeoutMs,
+      secondaryTimeoutMs,
+      retryTimeoutMs
+    );
   },
 });
 
