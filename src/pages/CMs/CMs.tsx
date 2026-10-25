@@ -38,7 +38,7 @@ import {
 
 import { cmsConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
-import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
+// import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
 import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
 import { evaluateFilterRule } from '../../components/FilterSection/filterEvaluator';
@@ -131,7 +131,7 @@ const CMs: React.FC = () => {
   // 1. View Toggles (Table, Chart, Globe)
   const [selectedViews, setSelectedViews] = useState({
     table: true,
-    map: true,
+    map: false,
     chart: true,
   });
 
@@ -927,9 +927,9 @@ const CMs: React.FC = () => {
               )}
 
               {/* ========================================================
-                  3. BOTTOM SECTION: GLOBE VIEW - UNDER CONSTRUCTION
+                  3. BOTTOM SECTION: GLOBE VIEW - UNDER CONSTRUCTION (COMMENTED OUT)
                  ======================================================== */}
-              {selectedViews.map && (
+              {/* {selectedViews.map && (
                 <section className="cms-globe-section">
                   <div className="globe-header">
                     <h3 className="globe-header-title">
@@ -951,7 +951,7 @@ const CMs: React.FC = () => {
                   </div>
                   <UnderConstruction />
                 </section>
-              )}
+              )} */}
             </>
           )}
         </div>

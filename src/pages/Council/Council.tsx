@@ -38,7 +38,7 @@ import {
 
 import { councilConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
-import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
+// import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
 import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
 import { evaluateFilterRule } from '../../components/FilterSection/filterEvaluator';
@@ -114,7 +114,7 @@ const getEducationCategory = (edu: string): string => {
 const Council: React.FC = () => {
   const [selectedViews, setSelectedViews] = useState({
     table: true,
-    map: true,
+    map: false,
     chart: true,
   });
 
@@ -815,8 +815,8 @@ const Council: React.FC = () => {
                 </section>
               )}
 
-              {/* 3. GLOBE VIEW */}
-              {selectedViews.map && (
+              {/* 3. GLOBE VIEW - UNDER CONSTRUCTION (COMMENTED OUT) */}
+              {/* {selectedViews.map && (
                 <section className="council-globe-section">
                   <div className="globe-header">
                     <h3 className="globe-header-title">
@@ -838,7 +838,7 @@ const Council: React.FC = () => {
                   </div>
                   <UnderConstruction />
                 </section>
-              )}
+              )} */}
             </>
           )}
         </div>

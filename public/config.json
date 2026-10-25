@@ -1,3 +1,11 @@
 {
-    "GRAPHQL_BACKENDURL": "http://127.0.0.1:9000/graphql/async/"
+  "GRAPHQL_BACKENDURL": "https://politiaware-api-render.samadhikar.com/graphql/async/",
+  "SECONDARY_GRAPHQL_BACKENDURL": "https://politiaware-api-gcp.samadhikar.com/graphql/async/",
+  "PRIMARY_TIMEOUT_MS": 2000,
+  "SECONDARY_TIMEOUT_MS": 3000,
+  "MIN_APP_VERSION": "0.0.1",
+  "LATEST_APP_VERSION": "0.0.1",
+  "FORCE_UPDATE": false,
+  "ANDROID_UPDATE_URL": "https://play.google.com/store/apps/details?id=io.ionic.starter",
+  "UPDATE_RELEASE_NOTES": "Latest civic dataset, bug fixes, and performance improvements."
 }
