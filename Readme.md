@@ -50,15 +50,58 @@ Ensure you have the following installed on your system:
 
 ## 🔧 Configuration
 
-The application loads its runtime configuration from `public/config.json`.
+The application supports build-time and runtime endpoint configuration for the Django GraphQL backend:
 
-Update `public/config.json` if your backend is hosted on a different host or port:
+1. **Environment Variables (`.env` / `.env.production`)**:
+   ```env
+   VITE_GRAPHQL_ENDPOINT=https://politiaware-backend.onrender.com/graphql/async/
+   VITE_SECONDARY_GRAPHQL_ENDPOINT=https://politiaware-api-gcp.samadhikar.com/graphql/async
+   VITE_PRIMARY_TIMEOUT_MS=3000
+   ```
 
-```json
-{
-  "GRAPHQL_BACKENDURL": "http://localhost:9000/graphql/"
-}
-```
+2. **Runtime Configuration (`public/config.json`) & Cloudflare Pages**:
+   If dynamic runtime overrides or app update gates are required without rebuilding:
+   ```json
+   {
+     "GRAPHQL_BACKENDURL": "https://politiaware-backend.onrender.com/graphql/async/",
+     "SECONDARY_GRAPHQL_BACKENDURL": "https://politiaware-api-gcp.samadhikar.com/graphql/async",
+     "PRIMARY_TIMEOUT_MS": 3000,
+     "MIN_APP_VERSION": "0.0.1",
+     "LATEST_APP_VERSION": "0.0.1",
+     "FORCE_UPDATE": false,
+     "ANDROID_UPDATE_URL": "https://play.google.com/store/apps/details?id=io.ionic.starter",
+     "UPDATE_RELEASE_NOTES": "Latest civic dataset, bug fixes, and performance improvements."
+   }
+   ```
+   - **Failover Mechanism**: All GraphQL queries (Apollo Client and `fetchGraphQL`) first query the Primary endpoint (`politiaware-backend.onrender.com`). If no response is received in 3 seconds (or if a 5xx error occurs), the request automatically fails over to the Secondary GCP endpoint (`politiaware-api-gcp.samadhikar.com`).
+   - **Mandatory Update**: When the installed Politiaware app version is strictly below `MIN_APP_VERSION` (or if `FORCE_UPDATE` is `true`), users are blocked by a non-dismissible dialog until they update.
+   - **Optional Update**: When the installed Politiaware app version is between `MIN_APP_VERSION` and `LATEST_APP_VERSION`, users receive an update prompt with a "Remind Me Later" option.
+
+3. **Django Backend Settings (`settings.py`)**:
+   Configure Django to accept requests from both Cloudflare Pages and the Capacitor Mobile App (`app.politiaware.com`):
+   ```python
+   ALLOWED_HOSTS = [
+       "politiaware-backend.onrender.com",
+       ".onrender.com",
+       "localhost",
+       "127.0.0.1",
+   ]
+
+   CSRF_TRUSTED_ORIGINS = [
+       "https://politiaware-react.pages.dev",  # Cloudflare Pages Web
+       "https://*.pages.dev",                  # Cloudflare preview builds
+       "https://app.politiaware.com",          # Android & iOS Capacitor mobile origin
+   ]
+
+   CORS_ALLOWED_ORIGINS = [
+       "https://politiaware-react.pages.dev",
+       "https://app.politiaware.com",
+   ]
+   CORS_ALLOWED_ORIGIN_REGEXES = [
+       r"^https://.*\.pages\.dev$",
+   ]
+   ```
+
 
 ---
 

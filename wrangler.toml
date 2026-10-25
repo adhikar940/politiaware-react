@@ -1,0 +1,9 @@
+name = "politiaware-react"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "dist"
+
+[vars]
+VITE_GRAPHQL_ENDPOINT = "https://politiaware-api-render.samadhikar.com/graphql/async/"
+VITE_SECONDARY_GRAPHQL_ENDPOINT = "https://politiaware-api-gcp.samadhikar.com/graphql/"
+VITE_PRIMARY_TIMEOUT_MS = "2000"
+VITE_SECONDARY_TIMEOUT_MS = "3000"

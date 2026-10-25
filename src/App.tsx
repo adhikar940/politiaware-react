@@ -28,10 +28,14 @@ import '@ionic/react/css/display.css';
 
 /* Theme variables */
 import './theme/variables.css';
+import { ForceUpdateModal } from './components/ForceUpdateModal';
+import { useAppUpdate } from './customhooks/useAppUpdate';
 
 setupIonicReact();
 
 const App: React.FC = () => {
+  const { updateInfo, isOpen, dismissUpdate } = useAppUpdate();
+
   return (
     <IonApp>
       <IonReactRouter>
@@ -48,6 +52,13 @@ const App: React.FC = () => {
           <Route path="/Council" element={<Council />} />
         </IonRouterOutlet>
       </IonReactRouter>
+
+      {/* Remote Config App Version Update Gate (Mandatory & Optional) */}
+      <ForceUpdateModal
+        updateInfo={updateInfo}
+        isOpen={isOpen}
+        onDismiss={dismissUpdate}
+      />
     </IonApp>
   );
 };
