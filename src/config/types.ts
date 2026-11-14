@@ -33,6 +33,7 @@ export interface TableColumnConfig {
 
 export interface GraphQLConfig {
   queryName: string;          // GraphQL query operation (e.g. 'allCms', 'allGovernors')
+  aggregatorQueryName?: string;// Aggregator query operation (e.g. 'cmaggregator', 'loksabhampaggregator')
   filterTypeName: string;     // Strawberry filter input type (e.g. 'AsyncFilterCmCmDepth1')
   rootDataKey?: string;       // Defaults to 'data'
   totalCountKey?: string;     // Defaults to 'total'

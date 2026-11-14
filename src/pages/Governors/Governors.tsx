@@ -36,7 +36,14 @@ import {
   TableSortLabel,
 } from '@mui/material';
 
-import { governorsConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
+import {
+  governorsConfig,
+  buildGraphQLQuery,
+  buildChartAggregatorQuery,
+  buildGraphQLFilters,
+  parseAggregatorResults,
+  renderCell,
+} from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
 // import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
@@ -65,7 +72,7 @@ export interface GovernorRecord {
   birthCity?: any;
 }
 
-type CategoryKey = 'Gender' | 'Religion' | 'Education';
+type CategoryKey = 'Gender' | 'Religion';
 
 const ALL_COLUMNS = governorsConfig.tableColumns.map((col) => ({
   id: col.id,
@@ -99,32 +106,6 @@ export const GOVERNOR_DEFAULT_FIELDS: FilterFieldDef[] = [
   { id: 'rulingperiods.startdate', label: 'Term Start Date', dataType: 'date' },
 ];
 
-const getEducationCategory = (eduRaw: string): string => {
-  const edu = (eduRaw || '').toLowerCase();
-  if (
-    edu.includes('ph.d') ||
-    edu.includes('m.a') ||
-    edu.includes('m.sc') ||
-    edu.includes('m.tech') ||
-    edu.includes('m.phil')
-  ) {
-    return 'Post-Grad / Ph.D';
-  } else if (edu.includes('ll.b') || edu.includes('law')) {
-    return 'Law (LL.B)';
-  } else if (
-    edu.includes('bachelor') ||
-    edu.includes('b.sc') ||
-    edu.includes('b.com') ||
-    edu.includes('b.a') ||
-    edu.includes('b.tech') ||
-    edu.includes('b.b.a')
-  ) {
-    return 'Graduate';
-  } else {
-    return 'Others';
-  }
-};
-
 const Governors: React.FC = () => {
   // 1. View Toggles (Table, Chart, Globe)
   const [selectedViews, setSelectedViews] = useState({
@@ -136,34 +117,48 @@ const Governors: React.FC = () => {
   // 1. Pagination, Search & Filter state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [searchInput, setSearchInput] = useState('');
   const [tableSearch, setTableSearch] = useState('');
   const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
   const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
   const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
 
+  // Convert applied filter rules to Strawberry GraphQL filter input
+  const graphQLFilters = useMemo(
+    () => buildGraphQLFilters(appliedAdvancedRules),
+    [appliedAdvancedRules]
+  );
+
   // 2. Dynamically generated GraphQL query from governorsConfig
   const GOVERNORS_GRAPHQL_QUERY = useMemo(() => buildGraphQLQuery(governorsConfig), []);
-  const GOVERNORS_CHART_QUERY = useMemo(() => buildChartSummaryQuery(governorsConfig), []);
+  const GOVERNORS_CHART_QUERY = useMemo(() => buildChartAggregatorQuery(governorsConfig), []);
 
-  // Server-side paginated query for table (limit, offset, search)
+  // Server-side paginated query for table (limit, offset, search, filters)
   const { data, loading, error, refetch } = useQuery(GOVERNORS_GRAPHQL_QUERY, {
     variables: {
       limit: rowsPerPage,
       offset: page * rowsPerPage,
       search: tableSearch.trim() || undefined,
+      filters: graphQLFilters,
     },
     notifyOnNetworkStatusChange: true,
   });
 
-  // Full institutional summary query for charts (37 members)
-  const { data: chartData } = useQuery(GOVERNORS_CHART_QUERY, {
+  // Backend aggregator query for charts (37 members)
+  const {
+    data: chartData,
+    loading: chartLoading,
+    error: chartError,
+    refetch: refetchChart,
+  } = useQuery(GOVERNORS_CHART_QUERY, {
     variables: {
-      limit: 5000,
-      offset: 0,
+      search: tableSearch.trim() || undefined,
+      filters: graphQLFilters,
     },
+    notifyOnNetworkStatusChange: true,
   });
 
-  const totalCount = data?.allGovernors?.total ?? 37;
+  const totalCount = chartData?.governoraggregator?.Total ?? data?.allGovernors?.total ?? 0;
 
   // Map API response to GovernorRecord objects (current page batch)
   const governorsList: GovernorRecord[] = useMemo(() => {
@@ -190,22 +185,6 @@ const Governors: React.FC = () => {
     }));
   }, [data]);
 
-  // Full dataset for charts
-  const chartGovernorsList = useMemo(() => {
-    const rawList = chartData?.allGovernors?.data;
-    if (!rawList || !Array.isArray(rawList)) return governorsList;
-
-    return rawList.map((item: any, idx: number) => ({
-      id: item.id ?? idx + 1,
-      name: item.name ?? 'Unknown',
-      state: item.rulingstate?.Statename ?? 'Unknown',
-      status: item.rulingstate?.Status === 'UT' ? 'UT' : 'State',
-      gender: item.gender ?? 'Male',
-      religion: item.religion ?? 'Hindu',
-      highestEducation: item.HighestEducation ?? item.highestEducation ?? '-',
-    }));
-  }, [chartData, governorsList]);
-
   // 3. Dynamically introspect filter fields and relations from backend GraphQL schema
   const { availableFields } = useGraphQLFilterSchema(
     governorsConfig.graphql.filterTypeName,
@@ -231,6 +210,7 @@ const Governors: React.FC = () => {
   };
 
   const handleClearAll = () => {
+    setSearchInput('');
     setTableSearch('');
     setChartFilter(null);
     setAdvancedRules([]);
@@ -309,12 +289,9 @@ const Governors: React.FC = () => {
       .filter((gov) => {
         if (chartFilter) {
           if (chartFilter.category === 'Gender') {
-            if (gov.gender !== chartFilter.value) return false;
+            if ((gov.gender || '').toLowerCase() !== chartFilter.value.toLowerCase()) return false;
           } else if (chartFilter.category === 'Religion') {
-            if (gov.religion !== chartFilter.value) return false;
-          } else if (chartFilter.category === 'Education') {
-            const cat = getEducationCategory(gov.highestEducation);
-            if (cat !== chartFilter.value) return false;
+            if ((gov.religion || '').toLowerCase() !== chartFilter.value.toLowerCase()) return false;
           }
         }
         return true;
@@ -348,83 +325,45 @@ const Governors: React.FC = () => {
     setPage(0);
   };
 
-  // 5. Dynamic Category Counts for Charts (Computed from baseFilteredData)
+  // 5. Dynamic Category Counts for Charts (Computed from backend aggregator)
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('Gender');
 
-  const categoryCounts = useMemo(() => {
-    const genderCounts: Record<string, number> = {};
-    const religionCounts: Record<string, number> = {};
-    const educationCounts: Record<string, number> = {
-      'Post-Grad / Ph.D': 0,
-      'Law (LL.B)': 0,
-      'Graduate': 0,
-      'Others': 0,
-    };
-
-    chartGovernorsList.forEach((gov) => {
-      // Gender
-      genderCounts[gov.gender] = (genderCounts[gov.gender] || 0) + 1;
-
-      // Religion
-      religionCounts[gov.religion] = (religionCounts[gov.religion] || 0) + 1;
-
-      // Education category
-      const eduCat = getEducationCategory(gov.highestEducation);
-      if (educationCounts[eduCat] !== undefined) {
-        educationCounts[eduCat] += 1;
-      } else {
-        educationCounts['Others'] += 1;
-      }
-    });
-
-    return {
-      Gender: genderCounts,
-      Religion: religionCounts,
-      Education: educationCounts,
-    };
-  }, [chartGovernorsList]);
-
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { State: 0, UT: 0 };
-    chartGovernorsList.forEach((gov) => {
-      counts[gov.status] = (counts[gov.status] || 0) + 1;
-    });
+    const counts: Record<string, number> = { State: 28, UT: 8 };
     return counts;
-  }, [chartGovernorsList]);
+  }, []);
 
-  const currentCategoryData = categoryCounts[selectedCategory] || {};
-  const currentTotal = Object.values(currentCategoryData).reduce((sum, n) => sum + n, 0);
-
-  // Dynamic color palette for categories
-  const categoryColors = useMemo(() => {
-    const palette = ['#0d9488', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#10b981'];
-    const keys = Object.keys(currentCategoryData);
-    const map: Record<string, string> = {};
-    keys.forEach((key, idx) => {
-      map[key] = palette[idx % palette.length];
-    });
-    return map;
-  }, [currentCategoryData]);
+  const { categoryData, categoryPercentages, categoryColors, currentTotal } = useMemo(() => {
+    return parseAggregatorResults(
+      chartData?.governoraggregator?.results,
+      selectedCategory
+    );
+  }, [chartData, selectedCategory]);
 
   // SVG Doughnut Calculation Helper
   const doughnutSlices = useMemo(() => {
     let accumulatedAngle = 0;
-    const entries = Object.entries(currentCategoryData);
+    const entries = Object.entries(categoryData);
     return entries.map(([key, count]) => {
       const percentage = currentTotal > 0 ? count / currentTotal : 0;
       const strokeDash = `${percentage * 238.76} 238.76`;
       const strokeOffset = -accumulatedAngle * 238.76;
       accumulatedAngle += percentage;
+      const pct =
+        categoryPercentages[key] !== undefined
+          ? Math.round(categoryPercentages[key])
+          : Math.round(percentage * 100);
+
       return {
         key,
         count,
-        percentage: Math.round(percentage * 100),
-        color: categoryColors[key],
+        percentage: pct,
+        color: categoryColors[key] || '#94a3b8',
         strokeDash,
         strokeOffset,
       };
     });
-  }, [currentCategoryData, currentTotal, categoryColors]);
+  }, [categoryData, categoryPercentages, currentTotal, categoryColors]);
 
   const handleSort = (property: string) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -503,7 +442,13 @@ const Governors: React.FC = () => {
                 Unable to establish a connection to the backend service. Please check your network connection or verify that the server is running.
               </p>
               <div className="error-actions-row">
-                <button className="error-retry-btn" onClick={() => refetch()}>
+                <button
+                  className="error-retry-btn"
+                  onClick={() => {
+                    refetch();
+                    refetchChart();
+                  }}
+                >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <IonIcon icon={refreshOutline} />
                     Retry Connection
@@ -537,23 +482,32 @@ const Governors: React.FC = () => {
                 hasActiveFilters={hasActiveFilters}
                 activeFiltersCount={activeFiltersCount}
                 onRemoveAdvancedRule={handleRemoveAdvancedRule}
-                extraActiveChips={
-                  chartFilter
+                extraActiveChips={[
+                  ...(tableSearch
+                    ? [
+                        {
+                          id: 'table-search',
+                          label: 'Search',
+                          value: tableSearch,
+                          onRemove: () => {
+                            setSearchInput('');
+                            setTableSearch('');
+                            setPage(0);
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(chartFilter
                     ? [
                         {
                           id: `chart-${chartFilter.category}-${chartFilter.value}`,
-                          label:
-                            chartFilter.category === 'Gender'
-                              ? 'Gender'
-                              : chartFilter.category === 'Religion'
-                              ? 'Religion'
-                              : 'Education',
+                          label: chartFilter.category,
                           value: chartFilter.value,
                           onRemove: () => setChartFilter(null),
                         },
                       ]
-                    : []
-                }
+                    : []),
+                ]}
               />
 
               {/* ========================================================
@@ -584,7 +538,50 @@ const Governors: React.FC = () => {
                     </div>
 
                     {/* Dual Visualizations Grid */}
-                    <div className="visualizations-grid">
+                    {chartLoading && !chartData?.governoraggregator ? (
+                      <div
+                        className="chart-loading-state"
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '48px 16px',
+                          minHeight: 220,
+                        }}
+                      >
+                        <IonSpinner name="crescent" color="primary" />
+                        <span style={{ marginTop: 12, fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+                          Loading institutional analysis (Total {totalCount} Governors)...
+                        </span>
+                      </div>
+                    ) : chartError && !chartData?.governoraggregator ? (
+                      <div
+                        className="chart-error-state"
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '32px 16px',
+                          minHeight: 180,
+                          textAlign: 'center',
+                        }}
+                      >
+                        <IonIcon icon={alertCircleOutline} style={{ fontSize: 32, color: '#ef4444', marginBottom: 8 }} />
+                        <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+                          Failed to load institutional chart data.
+                        </span>
+                        <button
+                          className="action-btn-pill"
+                          style={{ marginTop: 12, padding: '6px 16px', fontSize: 12, cursor: 'pointer' }}
+                          onClick={() => refetchChart()}
+                        >
+                          Retry Chart Loading
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="visualizations-grid">
                       {/* Left: SVG Doughnut Chart */}
                       <div className="pie-visual-box">
                         <span className="visual-box-title">
@@ -670,37 +667,36 @@ const Governors: React.FC = () => {
                             </span>
                           )}
                         </span>
-                        {Object.entries(currentCategoryData).map(([key, count]) => {
-                          const percentage = currentTotal > 0 ? Math.round((count / currentTotal) * 100) : 0;
-                          const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === key;
+                        {doughnutSlices.map((slice) => {
+                          const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === slice.key;
                           const isAnySelected = chartFilter?.category === selectedCategory;
 
                           return (
                             <div
-                              key={key}
+                              key={slice.key}
                               className={`bar-item ${isSelected ? 'selected-bar-item' : ''}`}
                               style={{
                                 cursor: 'pointer',
                                 opacity: isAnySelected && !isSelected ? 0.45 : 1,
                               }}
-                              onClick={() => handleChartItemClick(selectedCategory, key)}
-                              title={`Click to filter by ${key}`}
+                              onClick={() => handleChartItemClick(selectedCategory, slice.key)}
+                              title={`Click to filter by ${slice.key}`}
                             >
                               <div className="bar-item-header">
                                 <span>
-                                  {key}
+                                  {slice.key}
                                   {isSelected && <span style={{ color: '#0d9488', fontWeight: 900, marginLeft: 6 }}>&#x2713;</span>}
                                 </span>
                                 <span>
-                                  <strong>{count}</strong> ({percentage}%)
+                                  <strong>{slice.count}</strong> ({slice.percentage}%)
                                 </span>
                               </div>
                               <div className="bar-track">
                                 <div
                                   className="bar-fill"
                                   style={{
-                                    width: `${percentage}%`,
-                                    backgroundColor: categoryColors[key] || '#0d9488',
+                                    width: `${slice.percentage}%`,
+                                    backgroundColor: slice.color,
                                     boxShadow: isSelected ? '0 0 8px rgba(13, 148, 136, 0.4)' : undefined,
                                   }}
                                 ></div>
@@ -710,6 +706,7 @@ const Governors: React.FC = () => {
                         })}
                       </div>
                     </div>
+                    )}
                   </div>
 
                   {/* Right Column: 300x250 Google Ad Slot */}
@@ -747,26 +744,58 @@ const Governors: React.FC = () => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       {/* Search in table */}
-                      <div className="table-search-input">
-                        <IonIcon icon={searchOutline} style={{ color: '#94a3b8', marginRight: 8, fontSize: 16 }} />
-                        <input
-                          type="text"
-                          placeholder="Filter in results..."
-                          value={tableSearch}
-                          onChange={(e) => {
-                            setTableSearch(e.target.value);
-                            setPage(0);
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          setTableSearch(searchInput.trim());
+                          setPage(0);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <div className="table-search-input" style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '4px 10px', height: 36 }}>
+                          <IonIcon icon={searchOutline} style={{ color: '#94a3b8', marginRight: 8, fontSize: 16 }} />
+                          <input
+                            type="text"
+                            placeholder="Filter in results..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, width: 140 }}
+                          />
+                          {searchInput && (
+                            <button
+                              type="button"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                              onClick={() => {
+                                setSearchInput('');
+                                setTableSearch('');
+                                setPage(0);
+                              }}
+                              title="Clear search"
+                            >
+                              <IonIcon icon={closeOutline} />
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          type="submit"
+                          style={{
+                            height: 36,
+                            padding: '0 12px',
+                            background: '#0d9488',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            whiteSpace: 'nowrap',
                           }}
-                        />
-                        {tableSearch && (
-                          <button
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
-                            onClick={() => { setTableSearch(''); setPage(0); }}
-                          >
-                            <IonIcon icon={closeOutline} />
-                          </button>
-                        )}
-                      </div>
+                        >
+                          Submit
+                        </button>
+                      </form>
 
                       {/* MUI Column Visibility Customizer */}
                       <div className="column-select-dropdown">

@@ -5,6 +5,7 @@ export const cmsConfig: EntityConfig = {
   title: 'Chief Ministers',
   graphql: {
     queryName: 'allCms',
+    aggregatorQueryName: 'cmaggregator',
     filterTypeName: 'AsyncFilterCmCmDepth1',
     rootDataKey: 'data',
     totalCountKey: 'total',
@@ -33,14 +34,6 @@ export const cmsConfig: EntityConfig = {
       key: 'Religion',
       title: 'Religious Diversity',
       field: 'religion',
-      chartType: 'doughnut',
-      hasBarView: false,
-    },
-    {
-      id: 'education',
-      key: 'Education',
-      title: 'Educational Level',
-      field: 'HighestEducation',
       chartType: 'doughnut',
       hasBarView: false,
     },

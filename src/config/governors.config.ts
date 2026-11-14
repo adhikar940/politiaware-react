@@ -5,6 +5,7 @@ export const governorsConfig: EntityConfig = {
   title: 'Governors',
   graphql: {
     queryName: 'allGovernors',
+    aggregatorQueryName: 'governoraggregator',
     filterTypeName: 'AsyncFilterGovernorGovernorDepth1',
     rootDataKey: 'data',
     totalCountKey: 'total',
@@ -24,14 +25,6 @@ export const governorsConfig: EntityConfig = {
       key: 'Religion',
       title: 'Religious Diversity',
       field: 'religion',
-      chartType: 'doughnut',
-      hasBarView: false,
-    },
-    {
-      id: 'education',
-      key: 'Education',
-      title: 'Educational Level',
-      field: 'HighestEducation',
       chartType: 'doughnut',
       hasBarView: false,
     },

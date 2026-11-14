@@ -7,6 +7,7 @@ import {
   getSecondaryGraphQLUrl,
   getPrimaryTimeoutMs,
   getSecondaryTimeoutMs,
+  getRetryTimeoutMs,
   loadConfig,
 } from './config';
 import { fetchWithFailover } from './services/fetchWithFailover';
@@ -21,9 +22,34 @@ const httpLink = createHttpLink({
   fetch: (input, init) => {
     const primaryUrl = typeof input === 'string' ? input : input.toString();
     const secondaryUrl = getSecondaryGraphQLUrl();
-    const primaryTimeoutMs = getPrimaryTimeoutMs();
-    const secondaryTimeoutMs = getSecondaryTimeoutMs();
-    return fetchWithFailover(primaryUrl, secondaryUrl, init, primaryTimeoutMs, secondaryTimeoutMs);
+    let primaryTimeoutMs = getPrimaryTimeoutMs();
+    let secondaryTimeoutMs = getSecondaryTimeoutMs();
+    let retryTimeoutMs = getRetryTimeoutMs();
+
+    // Institutional chart summary queries or large batch queries (e.g. limit 5000) fetch
+    // comprehensive datasets (up to 4,108 MLAs, 544 MPs) that require extended backend serialization time.
+    const bodyStr = typeof init?.body === 'string' ? init.body : '';
+    const isChartOrBulkQuery =
+      bodyStr.includes('GetChartSummary') ||
+      bodyStr.includes('"limit":5000') ||
+      bodyStr.includes('"limit": 5000') ||
+      bodyStr.includes('limit: 5000') ||
+      bodyStr.includes('limit:5000');
+
+    if (isChartOrBulkQuery) {
+      primaryTimeoutMs = Math.max(primaryTimeoutMs, 20000);
+      secondaryTimeoutMs = Math.max(secondaryTimeoutMs, 30000);
+      retryTimeoutMs = Math.max(retryTimeoutMs, 30000);
+    }
+
+    return fetchWithFailover(
+      primaryUrl,
+      secondaryUrl,
+      init,
+      primaryTimeoutMs,
+      secondaryTimeoutMs,
+      retryTimeoutMs
+    );
   },
 });
 

@@ -5,6 +5,7 @@ export const assemblyConfig: EntityConfig = {
   title: 'State Legislative Assemblies (MLAs)',
   graphql: {
     queryName: 'allMLAs',
+    aggregatorQueryName: 'mlaaggregator',
     filterTypeName: 'AsyncFilterAssemblyMlaDepth1',
     rootDataKey: 'data',
     totalCountKey: 'total',
@@ -28,22 +29,14 @@ export const assemblyConfig: EntityConfig = {
       chartType: 'doughnut',
       hasBarView: false,
     },
-    {
-      id: 'religion',
-      key: 'Religion',
-      title: 'Religious Diversity',
-      field: 'religion',
-      chartType: 'doughnut',
-      hasBarView: false,
-    },
-    {
-      id: 'education',
-      key: 'Education',
-      title: 'Educational Level',
-      field: 'HighestEducation',
-      chartType: 'doughnut',
-      hasBarView: false,
-    },
+    // {
+    //   id: 'religion',
+    //   key: 'Religion',
+    //   title: 'Religious Diversity',
+    //   field: 'religion',
+    //   chartType: 'doughnut',
+    //   hasBarView: false,
+    // },
   ],
   tableColumns: [
     {

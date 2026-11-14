@@ -36,7 +36,15 @@ import {
   TableSortLabel,
 } from '@mui/material';
 
-import { assemblyConfig, buildGraphQLQuery, buildChartSummaryQuery, renderCell } from '../../config';
+import {
+  assemblyConfig,
+  buildGraphQLQuery,
+  buildChartAggregatorQuery,
+  buildGraphQLFilters,
+  parseAggregatorResults,
+  getAggregatorSummaryStats,
+  renderCell,
+} from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
 // import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
@@ -64,7 +72,7 @@ export interface MLARecord {
   [key: string]: any;
 }
 
-type CategoryKey = 'Party' | 'Gender' | 'Religion' | 'Education';
+type CategoryKey = 'Party' | 'Gender' | 'Religion';
 
 const ALL_COLUMNS = assemblyConfig.tableColumns.map((col) => ({
   id: col.id,
@@ -99,19 +107,6 @@ export const ASSEMBLY_FILTER_FIELDS: FilterFieldDef[] = [
   },
 ];
 
-const getEducationCategory = (edu: string): string => {
-  const low = (edu || '').toLowerCase();
-  if (low.includes('ph.d') || low.includes('doctor') || low.includes('m.phil') || low.includes('post-grad') || low.includes('m.') || low.includes('master')) {
-    return 'Post-Grad / Ph.D';
-  } else if (low.includes('ll.b') || low.includes('law') || low.includes('advocate') || low.includes('barrister')) {
-    return 'Law (LL.B)';
-  } else if (low.includes('graduate') || low.includes('b.') || low.includes('bachelor') || low.includes('degree') || low.includes('engineering')) {
-    return 'Graduate';
-  } else {
-    return 'Others';
-  }
-};
-
 const Assembly: React.FC = () => {
   const [selectedViews, setSelectedViews] = useState({
     table: true,
@@ -122,34 +117,48 @@ const Assembly: React.FC = () => {
   // 1. Pagination, Search & Filter state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [searchInput, setSearchInput] = useState('');
   const [tableSearch, setTableSearch] = useState('');
   const [chartFilter, setChartFilter] = useState<{ category: CategoryKey; value: string } | null>(null);
   const [advancedRules, setAdvancedRules] = useState<FilterRule[]>([]);
   const [appliedAdvancedRules, setAppliedAdvancedRules] = useState<FilterRule[]>([]);
 
+  // Convert applied filter rules to Strawberry GraphQL filter input
+  const graphQLFilters = useMemo(
+    () => buildGraphQLFilters(appliedAdvancedRules),
+    [appliedAdvancedRules]
+  );
+
   // 2. Dynamically generated GraphQL queries from assemblyConfig
   const ASSEMBLY_GRAPHQL_QUERY = useMemo(() => buildGraphQLQuery(assemblyConfig), []);
-  const ASSEMBLY_CHART_QUERY = useMemo(() => buildChartSummaryQuery(assemblyConfig), []);
+  const ASSEMBLY_CHART_QUERY = useMemo(() => buildChartAggregatorQuery(assemblyConfig), []);
 
-  // Server-side paginated query for table (limit, offset, search)
+  // Server-side paginated query for table (limit, offset, search, filters)
   const { data, loading, error, refetch } = useQuery(ASSEMBLY_GRAPHQL_QUERY, {
     variables: {
       limit: rowsPerPage,
       offset: page * rowsPerPage,
       search: tableSearch.trim() || undefined,
+      filters: graphQLFilters,
     },
     notifyOnNetworkStatusChange: true,
   });
 
-  // Full institutional summary query for charts (4,108 members)
-  const { data: chartData } = useQuery(ASSEMBLY_CHART_QUERY, {
+  // Backend aggregator query for charts (4,108 members)
+  const {
+    data: chartData,
+    loading: chartLoading,
+    error: chartError,
+    refetch: refetchChart,
+  } = useQuery(ASSEMBLY_CHART_QUERY, {
     variables: {
-      limit: 5000,
-      offset: 0,
+      search: tableSearch.trim() || undefined,
+      filters: graphQLFilters,
     },
+    notifyOnNetworkStatusChange: true,
   });
 
-  const totalCount = data?.allMLAs?.total ?? 4108;
+  const totalCount = chartData?.mlaaggregator?.Total ?? data?.allMLAs?.total ?? 0;
 
   // Map API response to MLARecord objects (current page batch)
   const mlaList: MLARecord[] = useMemo(() => {
@@ -175,24 +184,6 @@ const Assembly: React.FC = () => {
     }));
   }, [data]);
 
-  // Full dataset for charts
-  const chartMlasList = useMemo(() => {
-    const rawList = chartData?.allMLAs?.data;
-    if (!rawList || !Array.isArray(rawList)) return mlaList;
-
-    return rawList.map((item: any, idx: number) => ({
-      ...item,
-      id: item.id ?? idx + 1,
-      name: item.name ?? 'Unknown',
-      party: item.party?.abbreviation || 'Others',
-      partyName: item.party?.partyname || 'Other Party',
-      partyColor: item.party?.partyColor || '#059669',
-      gender: item.gender ?? 'Male',
-      religion: item.religion ?? 'Hindu',
-      highestEducation: item.HighestEducation ?? item.highestEducation ?? '-',
-    }));
-  }, [chartData, mlaList]);
-
   const { availableFields } = useGraphQLFilterSchema(
     assemblyConfig.graphql.filterTypeName,
     ASSEMBLY_FILTER_FIELDS
@@ -217,6 +208,7 @@ const Assembly: React.FC = () => {
   };
 
   const handleClearAll = () => {
+    setSearchInput('');
     setTableSearch('');
     setChartFilter(null);
     setAdvancedRules([]);
@@ -291,14 +283,13 @@ const Assembly: React.FC = () => {
       .filter((mla) => {
         if (chartFilter) {
           if (chartFilter.category === 'Party') {
-            if (mla.party !== chartFilter.value) return false;
+            const mlaParty = (mla.party || '').toLowerCase();
+            const filterVal = chartFilter.value.toLowerCase();
+            if (mlaParty !== filterVal && !filterVal.includes(mlaParty)) return false;
           } else if (chartFilter.category === 'Gender') {
-            if (mla.gender !== chartFilter.value) return false;
+            if ((mla.gender || '').toLowerCase() !== chartFilter.value.toLowerCase()) return false;
           } else if (chartFilter.category === 'Religion') {
-            if (mla.religion !== chartFilter.value) return false;
-          } else if (chartFilter.category === 'Education') {
-            const cat = getEducationCategory(mla.highestEducation);
-            if (cat !== chartFilter.value) return false;
+            if ((mla.religion || '').toLowerCase() !== chartFilter.value.toLowerCase()) return false;
           }
         }
         return true;
@@ -340,89 +331,56 @@ const Assembly: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('Party');
 
-  const categoryCounts = useMemo(() => {
-    const partyCounts: Record<string, number> = {};
-    const genderCounts: Record<string, number> = {};
-    const religionCounts: Record<string, number> = {};
-    const educationCounts: Record<string, number> = {
-      'Post-Grad / Ph.D': 0,
-      'Law (LL.B)': 0,
-      'Graduate': 0,
-      'Others': 0,
-    };
-
-    chartMlasList.forEach((mla) => {
-      partyCounts[mla.party] = (partyCounts[mla.party] || 0) + 1;
-      genderCounts[mla.gender] = (genderCounts[mla.gender] || 0) + 1;
-      religionCounts[mla.religion] = (religionCounts[mla.religion] || 0) + 1;
-      const eduCat = getEducationCategory(mla.highestEducation);
-      if (educationCounts[eduCat] !== undefined) {
-        educationCounts[eduCat] += 1;
-      } else {
-        educationCounts['Others'] += 1;
+  const backendPartyColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    mlaList.forEach((mla) => {
+      if (mla.party && mla.partyColor) {
+        map[mla.party.toUpperCase()] = mla.partyColor;
       }
     });
-
-    return {
-      Party: partyCounts,
-      Gender: genderCounts,
-      Religion: religionCounts,
-      Education: educationCounts,
-    };
-  }, [chartMlasList]);
-
-  const currentCategoryData = categoryCounts[selectedCategory] || {};
-  const currentTotal = Object.values(currentCategoryData).reduce((sum, n) => sum + n, 0);
-
-  const categoryColors = useMemo(() => {
-    if (selectedCategory === 'Party') {
-      const backendColorMap: Record<string, string> = {};
-      chartMlasList.forEach((mla) => {
-        if (mla.party && mla.partyColor) {
-          backendColorMap[mla.party] = mla.partyColor;
-        }
-      });
-      const keys = Object.keys(currentCategoryData);
-      const fallbackPalette = ['#059669', '#f97316', '#2563eb', '#a855f7', '#ef4444', '#eab308', '#64748b'];
-      const map: Record<string, string> = {};
-      keys.forEach((key, idx) => {
-        map[key] = backendColorMap[key] || fallbackPalette[idx % fallbackPalette.length];
-      });
-      return map;
-    }
-
-    const palette = ['#059669', '#ec4899', '#3b82f6', '#f59e0b', '#8b5cf6', '#0d9488'];
-    const keys = Object.keys(currentCategoryData);
-    const map: Record<string, string> = {};
-    keys.forEach((key, idx) => {
-      map[key] = palette[idx % palette.length];
-    });
     return map;
-  }, [selectedCategory, currentCategoryData, chartMlasList]);
+  }, [mlaList]);
+
+  const { categoryData, categoryPercentages, categoryColors, currentTotal } = useMemo(() => {
+    return parseAggregatorResults(
+      chartData?.mlaaggregator?.results,
+      selectedCategory,
+      backendPartyColorMap
+    );
+  }, [chartData, selectedCategory, backendPartyColorMap]);
+
+  const summaryStats = useMemo(
+    () => getAggregatorSummaryStats(chartData?.mlaaggregator?.results),
+    [chartData]
+  );
 
   const donutSlices = useMemo(() => {
     if (currentTotal === 0) return [];
     let cumulative = 0;
     const circumference = 2 * Math.PI * 38;
 
-    return Object.entries(currentCategoryData)
-      .filter(([_, count]) => count > 0)
+    return Object.entries(categoryData)
+      .filter(([, count]) => count > 0)
       .map(([key, count]) => {
         const ratio = count / currentTotal;
         const strokeDasharray = `${ratio * circumference} ${circumference}`;
         const strokeDashoffset = -cumulative * circumference;
         cumulative += ratio;
+        const pct =
+          categoryPercentages[key] !== undefined
+            ? categoryPercentages[key].toFixed(1)
+            : (ratio * 100).toFixed(1);
 
         return {
           key,
           count,
-          percentage: (ratio * 100).toFixed(1),
+          percentage: pct,
           strokeDasharray,
           strokeDashoffset,
           color: categoryColors[key] || '#94a3b8',
         };
       });
-  }, [currentCategoryData, currentTotal, categoryColors]);
+  }, [categoryData, categoryPercentages, currentTotal, categoryColors]);
 
   return (
     <IonPage id="main-content">
@@ -435,7 +393,13 @@ const Assembly: React.FC = () => {
           </IonButtons>
           <IonTitle style={{ fontWeight: 'bold' }}>State Legislative Assemblies (MLAs)</IonTitle>
           <IonButtons slot="end">
-            <IonButton onClick={() => refetch()} title="Refresh Data">
+            <IonButton
+              onClick={() => {
+                refetch();
+                refetchChart();
+              }}
+              title="Refresh Data"
+            >
               <IonIcon icon={refreshOutline} />
             </IonButton>
           </IonButtons>
@@ -456,15 +420,15 @@ const Assembly: React.FC = () => {
             </div>
             <div className="assembly-hero-kpi">
               <div className="hero-stat-box">
-                <div className="hero-stat-num">{data?.allMLAs?.total ?? mlaList.length}</div>
+                <div className="hero-stat-num">{totalCount}</div>
                 <div className="hero-stat-label">Total MLAs</div>
               </div>
               <div className="hero-stat-box">
-                <div className="hero-stat-num">{categoryCounts.Gender['Female'] || 0}</div>
+                <div className="hero-stat-num">{summaryStats.femaleCount}</div>
                 <div className="hero-stat-label">Women MLAs</div>
               </div>
               <div className="hero-stat-box">
-                <div className="hero-stat-num">{Object.keys(categoryCounts.Party).length}</div>
+                <div className="hero-stat-num">{summaryStats.partyCount}</div>
                 <div className="hero-stat-label">Parties</div>
               </div>
             </div>
@@ -513,8 +477,22 @@ const Assembly: React.FC = () => {
                 hasActiveFilters={hasActiveFilters}
                 activeFiltersCount={activeFiltersCount}
                 onRemoveAdvancedRule={handleRemoveAdvancedRule}
-                extraActiveChips={
-                  chartFilter
+                extraActiveChips={[
+                  ...(tableSearch
+                    ? [
+                        {
+                          id: 'table-search',
+                          label: 'Search',
+                          value: tableSearch,
+                          onRemove: () => {
+                            setSearchInput('');
+                            setTableSearch('');
+                            setPage(0);
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(chartFilter
                     ? [
                         {
                           id: `chart-${chartFilter.category}-${chartFilter.value}`,
@@ -523,8 +501,8 @@ const Assembly: React.FC = () => {
                           onRemove: () => setChartFilter(null),
                         },
                       ]
-                    : []
-                }
+                    : []),
+                ]}
               />
 
               {/* 1. TOP SECTION: ANALYSIS CHART CANVAS + 300x250 GOOGLE AD */}
@@ -550,88 +528,132 @@ const Assembly: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="visualizations-grid">
-                      <div className="pie-visual-box">
-                        <span className="visual-box-title">
-                          Distribution Ratio
-                          {chartFilter && chartFilter.category === selectedCategory && (
-                            <span style={{ fontSize: 10, color: '#059669', marginLeft: 6, fontWeight: 700 }}>
-                              (Filtered: {chartFilter.value})
-                            </span>
-                          )}
+                    {chartLoading && !chartData?.mlaaggregator ? (
+                      <div
+                        className="chart-loading-state"
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '48px 16px',
+                          minHeight: 220,
+                        }}
+                      >
+                        <IonSpinner name="crescent" color="primary" />
+                        <span style={{ marginTop: 12, fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+                          Loading institutional analysis (Total {totalCount} MLAs)...
                         </span>
-                        <div className="donut-svg-wrapper">
-                          <svg className="w-40 h-40 transform -rotate-90" viewBox="0 0 100 100" style={{ width: 170, height: 170 }}>
-                            <circle cx="50" cy="50" r="38" stroke="#f1f5f9" strokeWidth="15" fill="none" />
+                      </div>
+                    ) : chartError && !chartData?.mlaaggregator ? (
+                      <div
+                        className="chart-error-state"
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '32px 16px',
+                          minHeight: 180,
+                          textAlign: 'center',
+                        }}
+                      >
+                        <IonIcon icon={alertCircleOutline} style={{ fontSize: 32, color: '#ef4444', marginBottom: 8 }} />
+                        <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+                          Failed to load institutional chart data.
+                        </span>
+                        <button
+                          className="action-btn-pill"
+                          style={{ marginTop: 12, padding: '6px 16px', fontSize: 12, cursor: 'pointer' }}
+                          onClick={() => refetchChart()}
+                        >
+                          Retry Chart Loading
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="visualizations-grid">
+                        <div className="pie-visual-box">
+                          <span className="visual-box-title">
+                            Distribution Ratio
+                            {chartFilter && chartFilter.category === selectedCategory && (
+                              <span style={{ fontSize: 10, color: '#059669', marginLeft: 6, fontWeight: 700 }}>
+                                (Filtered: {chartFilter.value})
+                              </span>
+                            )}
+                          </span>
+                          <div className="donut-svg-wrapper">
+                            <svg className="w-40 h-40 transform -rotate-90" viewBox="0 0 100 100" style={{ width: 170, height: 170 }}>
+                              <circle cx="50" cy="50" r="38" stroke="#f1f5f9" strokeWidth="15" fill="none" />
+                              {donutSlices.map((slice) => {
+                                const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === slice.key;
+                                const isAnySelected = chartFilter?.category === selectedCategory;
+                                return (
+                                  <circle
+                                    key={slice.key}
+                                    cx="50"
+                                    cy="50"
+                                    r="38"
+                                    stroke={slice.color}
+                                    strokeWidth={isSelected ? 18 : 15}
+                                    strokeDasharray={slice.strokeDasharray}
+                                    strokeDashoffset={slice.strokeDashoffset}
+                                    fill="none"
+                                    opacity={!isAnySelected || isSelected ? 1 : 0.25}
+                                    style={{
+                                      cursor: 'pointer',
+                                      transition: 'all 0.3s ease',
+                                      transformOrigin: 'center',
+                                    }}
+                                    onClick={() => handleChartItemClick(selectedCategory, slice.key)}
+                                  >
+                                    <title>{`${slice.key}: ${slice.count} (${slice.percentage}%)`}</title>
+                                  </circle>
+                                );
+                              })}
+                            </svg>
+                            <div className="pie-center-stat">
+                              <span className="pie-center-num">{currentTotal}</span>
+                              <span className="pie-center-label">Total MLAs</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bar-visual-box">
+                          <span className="visual-box-title">Comparative Volume Breakdown</span>
+                          <div className="bar-breakdown-list">
                             {donutSlices.map((slice) => {
                               const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === slice.key;
                               const isAnySelected = chartFilter?.category === selectedCategory;
                               return (
-                                <circle
+                                <div
                                   key={slice.key}
-                                  cx="50"
-                                  cy="50"
-                                  r="38"
-                                  stroke={slice.color}
-                                  strokeWidth={isSelected ? 18 : 15}
-                                  strokeDasharray={slice.strokeDasharray}
-                                  strokeDashoffset={slice.strokeDashoffset}
-                                  fill="none"
-                                  opacity={!isAnySelected || isSelected ? 1 : 0.25}
+                                  className="bar-row-item"
                                   style={{
-                                    cursor: 'pointer',
-                                    transition: 'all 0.3s ease',
-                                    transformOrigin: 'center',
+                                    opacity: !isAnySelected || isSelected ? 1 : 0.35,
+                                    background: isSelected ? 'rgba(5, 150, 105, 0.08)' : 'transparent',
                                   }}
                                   onClick={() => handleChartItemClick(selectedCategory, slice.key)}
                                 >
-                                  <title>{`${slice.key}: ${slice.count} (${slice.percentage}%)`}</title>
-                                </circle>
+                                  <div className="bar-row-header">
+                                    <span className="bar-row-label">{slice.key}</span>
+                                    <span className="bar-row-val">{slice.count} ({slice.percentage}%)</span>
+                                  </div>
+                                  <div className="bar-row-track">
+                                    <div
+                                      className="bar-row-fill"
+                                      style={{
+                                        width: `${slice.percentage}%`,
+                                        backgroundColor: slice.color,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               );
                             })}
-                          </svg>
-                          <div className="pie-center-stat">
-                            <span className="pie-center-num">{currentTotal}</span>
-                            <span className="pie-center-label">Total MLAs</span>
                           </div>
                         </div>
                       </div>
-
-                      <div className="bar-visual-box">
-                        <span className="visual-box-title">Comparative Volume Breakdown</span>
-                        <div className="bar-breakdown-list">
-                          {donutSlices.map((slice) => {
-                            const isSelected = chartFilter?.category === selectedCategory && chartFilter.value === slice.key;
-                            const isAnySelected = chartFilter?.category === selectedCategory;
-                            return (
-                              <div
-                                key={slice.key}
-                                className="bar-row-item"
-                                style={{
-                                  opacity: !isAnySelected || isSelected ? 1 : 0.35,
-                                  background: isSelected ? 'rgba(5, 150, 105, 0.08)' : 'transparent',
-                                }}
-                                onClick={() => handleChartItemClick(selectedCategory, slice.key)}
-                              >
-                                <div className="bar-row-header">
-                                  <span className="bar-row-label">{slice.key}</span>
-                                  <span className="bar-row-val">{slice.count} ({slice.percentage}%)</span>
-                                </div>
-                                <div className="bar-row-track">
-                                  <div
-                                    className="bar-row-fill"
-                                    style={{
-                                      width: `${slice.percentage}%`,
-                                      backgroundColor: slice.color,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   <div className="assembly-ads-card">
@@ -682,27 +704,58 @@ const Assembly: React.FC = () => {
                     </div>
 
                     <div className="table-actions-group" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      <div className="table-search-input" style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '4px 10px', height: 36 }}>
-                        <IonIcon icon={searchOutline} style={{ color: '#94a3b8', marginRight: 8, fontSize: 16 }} />
-                        <input
-                          type="text"
-                          placeholder="Filter in results..."
-                          value={tableSearch}
-                          onChange={(e) => {
-                            setTableSearch(e.target.value);
-                            setPage(0);
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          setTableSearch(searchInput.trim());
+                          setPage(0);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <div className="table-search-input" style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '4px 10px', height: 36 }}>
+                          <IonIcon icon={searchOutline} style={{ color: '#94a3b8', marginRight: 8, fontSize: 16 }} />
+                          <input
+                            type="text"
+                            placeholder="Filter in results..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, width: 140 }}
+                          />
+                          {searchInput && (
+                            <button
+                              type="button"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                              onClick={() => {
+                                setSearchInput('');
+                                setTableSearch('');
+                                setPage(0);
+                              }}
+                              title="Clear search"
+                            >
+                              <IonIcon icon={closeOutline} />
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          type="submit"
+                          style={{
+                            height: 36,
+                            padding: '0 12px',
+                            background: '#059669',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            whiteSpace: 'nowrap',
                           }}
-                          style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, width: 140 }}
-                        />
-                        {tableSearch && (
-                          <button
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
-                            onClick={() => { setTableSearch(''); setPage(0); }}
-                          >
-                            <IonIcon icon={closeOutline} />
-                          </button>
-                        )}
-                      </div>
+                        >
+                          Submit
+                        </button>
+                      </form>
                       <FormControl size="small" sx={{ minWidth: 160 }}>
                         <InputLabel id="assembly-columns-select-label" style={{ fontSize: 12 }}>
                           Columns

@@ -5,6 +5,7 @@ export const councilConfig: EntityConfig = {
   title: 'State Legislative Councils (MLCs)',
   graphql: {
     queryName: 'allMLCs',
+    aggregatorQueryName: 'mlcaggregator',
     filterTypeName: 'AsyncFilterCouncilMlcDepth1',
     rootDataKey: 'data',
     totalCountKey: 'total',
@@ -28,14 +29,14 @@ export const councilConfig: EntityConfig = {
       chartType: 'doughnut',
       hasBarView: false,
     },
-    {
-      id: 'education',
-      key: 'Education',
-      title: 'Educational Level',
-      field: 'HighestEducation',
-      chartType: 'doughnut',
-      hasBarView: false,
-    },
+    // {
+    //   id: 'religion',
+    //   key: 'Religion',
+    //   title: 'Religious Diversity',
+    //   field: 'religion',
+    //   chartType: 'doughnut',
+    //   hasBarView: false,
+    // },
   ],
   tableColumns: [
     {

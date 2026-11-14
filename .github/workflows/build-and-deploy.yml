@@ -24,7 +24,8 @@ jobs:
           VITE_GRAPHQL_ENDPOINT: ${{ vars.VITE_GRAPHQL_ENDPOINT || 'https://politiaware-api-render.samadhikar.com/graphql/async/' }}
           VITE_SECONDARY_GRAPHQL_ENDPOINT: ${{ vars.VITE_SECONDARY_GRAPHQL_ENDPOINT || 'https://politiaware-api-gcp.samadhikar.com/graphql/async/' }}
           VITE_PRIMARY_TIMEOUT_MS: '2000'
-          VITE_SECONDARY_TIMEOUT_MS: '3000'
+          VITE_SECONDARY_TIMEOUT_MS: '5000'
+          VITE_RETRY_TIMEOUT_MS: '5000'
 
       - name: Deploy dist to Cloudflare Pages
         run: npx wrangler@latest pages deploy dist --project-name "${CLOUDFLARE_PAGES_PROJECT:-politiaware-react}"
@@ -57,7 +58,8 @@ jobs:
           VITE_GRAPHQL_ENDPOINT: ${{ vars.VITE_GRAPHQL_ENDPOINT || 'https://politiaware-api-render.samadhikar.com/graphql/async/' }}
           VITE_SECONDARY_GRAPHQL_ENDPOINT: ${{ vars.VITE_SECONDARY_GRAPHQL_ENDPOINT || 'https://politiaware-api-gcp.samadhikar.com/graphql/async/' }}
           VITE_PRIMARY_TIMEOUT_MS: '2000'
-          VITE_SECONDARY_TIMEOUT_MS: '3000'
+          VITE_SECONDARY_TIMEOUT_MS: '5000'
+          VITE_RETRY_TIMEOUT_MS: '5000'
       - run: npx cap add android
         if: ${{ !hashFiles('android/settings.gradle', 'android/settings.gradle.kts') }}
       - run: npx cap sync android

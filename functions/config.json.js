@@ -15,7 +15,12 @@ export async function onRequest(context) {
   );
 
   const secondaryTimeoutMs = parseInt(
-    context.env.SECONDARY_TIMEOUT_MS || context.env.VITE_SECONDARY_TIMEOUT_MS || '3000',
+    context.env.SECONDARY_TIMEOUT_MS || context.env.VITE_SECONDARY_TIMEOUT_MS || '5000',
+    10
+  );
+
+  const retryTimeoutMs = parseInt(
+    context.env.RETRY_TIMEOUT_MS || context.env.VITE_RETRY_TIMEOUT_MS || '5000',
     10
   );
 
@@ -41,6 +46,7 @@ export async function onRequest(context) {
       SECONDARY_GRAPHQL_BACKENDURL: secondaryEndpoint,
       PRIMARY_TIMEOUT_MS: timeoutMs,
       SECONDARY_TIMEOUT_MS: secondaryTimeoutMs,
+      RETRY_TIMEOUT_MS: retryTimeoutMs,
       MIN_APP_VERSION: minVersion,
       LATEST_APP_VERSION: latestVersion,
       FORCE_UPDATE: forceUpdate,
