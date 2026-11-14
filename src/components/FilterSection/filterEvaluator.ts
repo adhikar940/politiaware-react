@@ -219,10 +219,10 @@ export function buildBackendGraphQLFilterObject(
         setNested(result, parts, 'exact', rule.value.trim());
         break;
       case 'startswith':
-        setNested(result, parts, 'startswith', rule.value.trim());
+        setNested(result, parts, 'istartswith', rule.value.trim());
         break;
       case 'endswith':
-        setNested(result, parts, 'endswith', rule.value.trim());
+        setNested(result, parts, 'iendswith', rule.value.trim());
         break;
       case 'in':
         setNested(result, parts, 'in', rule.value.split(',').map((s) => s.trim()));

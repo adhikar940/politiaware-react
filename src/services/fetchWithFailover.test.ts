@@ -145,5 +145,34 @@ describe('fetchWithFailover', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
+
+  it('supports extended timeouts for large institutional chart queries', async () => {
+    vi.useFakeTimers();
+
+    const mockResponse = new Response(JSON.stringify({ data: { allMLAs: { total: 4108 } } }), {
+      status: 200,
+    });
+
+    const fetchSpy = vi.fn().mockImplementation((url) => {
+      if (url === primaryUrl) {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve(mockResponse), 8000);
+        });
+      }
+      return Promise.reject(new Error('Secondary not needed'));
+    });
+
+    vi.stubGlobal('fetch', fetchSpy);
+
+    // Chart query with extended timeout (20s on primary)
+    const promise = fetchWithFailover(primaryUrl, secondaryUrl, {}, 20000, 30000, 30000);
+
+    // Fast forward 8000ms - query completes successfully on primary
+    await vi.advanceTimersByTimeAsync(8000);
+
+    const res = await promise;
+    expect(res).toBe(mockResponse);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
