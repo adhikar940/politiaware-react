@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { isAdSenseEligible, formatPublisherId } from '../../utils/loadAdSense';
 
 export interface AdSenseBannerProps {
-  slot: string;
+  slot?: string;
   client?: string;
   format?: 'auto' | 'fluid' | 'rectangle' | 'horizontal' | 'vertical';
   responsive?: 'true' | 'false';
@@ -20,10 +20,11 @@ export const AdSenseBanner: React.FC<AdSenseBannerProps> = ({
 }) => {
   const rawClient = client || import.meta.env.VITE_ADSENSE_PUB_ID;
   const adClient = formatPublisherId(rawClient);
+  const adSlot = slot || import.meta.env.VITE_ADSENSE_SLOT_ID;
   const isPushed = useRef(false);
 
   useEffect(() => {
-    if (!isAdSenseEligible() || !adClient || !slot) {
+    if (!isAdSenseEligible() || !adClient || !adSlot) {
       return;
     }
 
@@ -40,10 +41,10 @@ export const AdSenseBanner: React.FC<AdSenseBannerProps> = ({
     } catch (err) {
       console.warn('AdSense push error:', err);
     }
-  }, [adClient, slot]);
+  }, [adClient, adSlot]);
 
   // If not eligible (e.g. Android app, localhost, or env var not set), render nothing
-  if (!isAdSenseEligible() || !adClient || !slot) {
+  if (!isAdSenseEligible() || !adClient || !adSlot) {
     return null;
   }
 
@@ -52,7 +53,7 @@ export const AdSenseBanner: React.FC<AdSenseBannerProps> = ({
       className={className}
       style={{
         textAlign: 'center',
-        margin: '12px auto',
+        margin: '16px auto',
         overflow: 'hidden',
         ...style,
       }}
@@ -61,7 +62,7 @@ export const AdSenseBanner: React.FC<AdSenseBannerProps> = ({
         className="adsbygoogle"
         style={{ display: 'block' }}
         data-ad-client={adClient}
-        data-ad-slot={slot}
+        data-ad-slot={adSlot}
         data-ad-format={format}
         data-full-width-responsive={responsive}
       />

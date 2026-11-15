@@ -12,6 +12,7 @@ import {
 import { menuOutline, arrowForwardOutline } from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
 import { fetchGraphQL } from '../../services/graphqlService';
+import { AdSenseBanner } from '../../components/ads';
 import './Home.css';
 
 interface EntityCount {
@@ -314,6 +315,8 @@ const Home: React.FC = () => {
             </div>
           </div>
 
+          {/* Ad Banner */}
+          <AdSenseBanner />
         </div>
       </IonContent>
     </IonPage>
