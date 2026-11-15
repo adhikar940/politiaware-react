@@ -45,6 +45,7 @@ import {
   renderCell,
 } from '../../config';
 import Selectable from '../../components/Selectable/Selectable';
+import { AdSenseBanner } from '../../components/ads';
 // import UnderConstruction from '../../components/UnderConstruction/UnderConstuction';
 import { FilterSection } from '../../components/FilterSection/FilterSection';
 import { FilterFieldDef, FilterRule } from '../../components/FilterSection/filterTypes';
@@ -966,6 +967,9 @@ const CMs: React.FC = () => {
                   <UnderConstruction />
                 </section>
               )} */}
+
+              {/* Ad Banner */}
+              <AdSenseBanner />
             </>
           )}
         </div>

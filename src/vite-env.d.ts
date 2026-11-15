@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_SECONDARY_TIMEOUT_MS?: string;
   readonly VITE_RETRY_TIMEOUT_MS?: string;
   readonly VITE_ADSENSE_PUB_ID?: string;
+  readonly VITE_ADSENSE_SLOT_ID?: string;
 }
 
 interface ImportMeta {
