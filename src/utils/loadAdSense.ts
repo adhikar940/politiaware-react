@@ -1,6 +1,22 @@
 import { Capacitor } from '@capacitor/core';
 
 /**
+ * Normalizes a Google AdSense publisher ID to ensure it has the required 'ca-' prefix.
+ * e.g., 'pub-2632542826076812' -> 'ca-pub-2632542826076812'
+ */
+export function formatPublisherId(id?: string): string {
+  if (!id) return '';
+  const trimmed = id.trim();
+  if (trimmed.startsWith('ca-')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('pub-')) {
+    return `ca-${trimmed}`;
+  }
+  return `ca-pub-${trimmed}`;
+}
+
+/**
  * Returns true only when:
  * 1. The app is running on the Web (not inside native Android/iOS Capacitor wrapper).
  * 2. It is not localhost or local loopback (avoids AdSense invalid traffic penalties during dev).
@@ -29,7 +45,8 @@ export function loadAdSenseScript(): void {
     return;
   }
 
-  const pubId = import.meta.env.VITE_ADSENSE_PUB_ID;
+  const rawPubId = import.meta.env.VITE_ADSENSE_PUB_ID;
+  const pubId = formatPublisherId(rawPubId);
 
   // Prevent duplicate script insertion
   if (document.querySelector('script[src*="adsbygoogle.js"]')) {

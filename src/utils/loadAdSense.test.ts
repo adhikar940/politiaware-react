@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Capacitor } from '@capacitor/core';
-import { isAdSenseEligible, loadAdSenseScript } from './loadAdSense';
+import { isAdSenseEligible, loadAdSenseScript, formatPublisherId } from './loadAdSense';
 
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
@@ -17,7 +17,6 @@ describe('loadAdSense utility', () => {
   });
 
   afterEach(() => {
-    // Restore window.location if modified
     Object.defineProperty(window, 'location', {
       value: originalLocation,
       writable: true,
@@ -31,11 +30,30 @@ describe('loadAdSense utility', () => {
     });
   }
 
+  describe('formatPublisherId', () => {
+    it('handles pub- prefix and converts to ca-pub-', () => {
+      expect(formatPublisherId('pub-2632542826076812')).toBe('ca-pub-2632542826076812');
+    });
+
+    it('keeps existing ca- prefix intact', () => {
+      expect(formatPublisherId('ca-pub-2632542826076812')).toBe('ca-pub-2632542826076812');
+    });
+
+    it('handles raw digits by prepending ca-pub-', () => {
+      expect(formatPublisherId('2632542826076812')).toBe('ca-pub-2632542826076812');
+    });
+
+    it('returns empty string if empty or undefined', () => {
+      expect(formatPublisherId('')).toBe('');
+      expect(formatPublisherId(undefined)).toBe('');
+    });
+  });
+
   describe('isAdSenseEligible', () => {
     it('returns false when running on native platform (Android/iOS)', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
       setHostname('politiaware.com');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       expect(isAdSenseEligible()).toBe(false);
     });
@@ -43,7 +61,7 @@ describe('loadAdSense utility', () => {
     it('returns false when running on localhost', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
       setHostname('localhost');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       expect(isAdSenseEligible()).toBe(false);
     });
@@ -51,7 +69,7 @@ describe('loadAdSense utility', () => {
     it('returns false when running on 127.0.0.1', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
       setHostname('127.0.0.1');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       expect(isAdSenseEligible()).toBe(false);
     });
@@ -67,7 +85,7 @@ describe('loadAdSense utility', () => {
     it('returns true when running on web, non-localhost, and VITE_ADSENSE_PUB_ID is set', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
       setHostname('politiaware.com');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       expect(isAdSenseEligible()).toBe(true);
     });
@@ -77,7 +95,7 @@ describe('loadAdSense utility', () => {
     it('does not inject script tag if ineligible', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
       setHostname('politiaware.com');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       loadAdSenseScript();
 
@@ -85,16 +103,16 @@ describe('loadAdSense utility', () => {
       expect(script).toBeNull();
     });
 
-    it('injects script tag with correct attributes when eligible', () => {
+    it('injects script tag with normalized ca-pub ID when eligible', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
       setHostname('politiaware.com');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       loadAdSenseScript();
 
       const script = document.querySelector('script[src*="adsbygoogle.js"]') as HTMLScriptElement;
       expect(script).not.toBeNull();
-      expect(script?.src).toContain('client=ca-pub-1234567890');
+      expect(script?.src).toContain('client=ca-pub-2632542826076812');
       expect(script?.crossOrigin).toBe('anonymous');
       expect(script?.async).toBe(true);
     });
@@ -102,7 +120,7 @@ describe('loadAdSense utility', () => {
     it('does not insert duplicate script tags if called multiple times', () => {
       vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
       setHostname('politiaware.com');
-      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'ca-pub-1234567890');
+      vi.stubEnv('VITE_ADSENSE_PUB_ID', 'pub-2632542826076812');
 
       loadAdSenseScript();
       loadAdSenseScript();

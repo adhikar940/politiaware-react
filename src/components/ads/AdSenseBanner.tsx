@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { isAdSenseEligible } from '../../utils/loadAdSense';
+import { isAdSenseEligible, formatPublisherId } from '../../utils/loadAdSense';
 
 export interface AdSenseBannerProps {
   slot: string;
@@ -18,7 +18,8 @@ export const AdSenseBanner: React.FC<AdSenseBannerProps> = ({
   style,
   className,
 }) => {
-  const adClient = client || import.meta.env.VITE_ADSENSE_PUB_ID;
+  const rawClient = client || import.meta.env.VITE_ADSENSE_PUB_ID;
+  const adClient = formatPublisherId(rawClient);
   const isPushed = useRef(false);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export const AdSenseBanner: React.FC<AdSenseBannerProps> = ({
       return;
     }
 
-    // Guard against double pushing in React 18/19 StrictMode in dev (though dev is already excluded by isAdSenseEligible)
+    // Guard against double pushing in StrictMode
     if (isPushed.current) {
       return;
     }
