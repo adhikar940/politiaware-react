@@ -11,6 +11,10 @@ import {
   loadConfig,
 } from './config';
 import { fetchWithFailover } from './services/fetchWithFailover';
+import { loadAdSenseScript } from './utils/loadAdSense';
+
+// Load Google AdSense dynamically only when on Web, non-localhost, and VITE_ADSENSE_PUB_ID is set
+loadAdSenseScript();
 
 // Eagerly trigger runtime configuration fetch if available
 loadConfig().catch((err) => {

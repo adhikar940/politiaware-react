@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'io.ionic.starter',
-  appName: 'politiaware-react',
+  appId: 'com.politiaware.app', // Change to your unique package identifier
+  appName: 'Politiaware',        // App title shown under the icon
   webDir: 'dist',
   server: {
     androidScheme: 'https',
